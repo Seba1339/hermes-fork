@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes-Enhanced Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hermes-fork
+Environment=HERMES_HOME=/home/ubuntu/.hermes-enhanced
+Environment=API_SERVER_PORT=8643
+Environment=HOME=/home/ubuntu
+ExecStart=/home/ubuntu/hermes-fork/.venv/bin/python -m hermes_cli.main gateway run --replace
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
