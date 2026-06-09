@@ -519,10 +519,16 @@ def _get_skill_descriptions() -> Dict[str, str]:
 
 def _load_sbert():
     global _SBERT_MODEL
-    if _SBERT_MODEL is None:
+    if _SBERT_MODEL is not None:
+        return _SBERT_MODEL
+    try:
         from sentence_transformers import SentenceTransformer
         _SBERT_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-    return _SBERT_MODEL
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"SBERT load failed (semantic fallback to regex): {e}")
+        _SBERT_MODEL = False  # Sentinel: don't retry every call
+    return _SBERT_MODEL if _SBERT_MODEL is not False else None
 
 
 def _build_embedding_cache():
