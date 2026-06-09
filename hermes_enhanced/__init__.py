@@ -16,59 +16,47 @@ ENABLED = os.environ.get("HERMES_ENHANCED", "0") == "1"
 
 def critic_evaluate(user_message: str, response_text: str, agent=None) -> dict:
     """
-    Evalua la respuesta del agente usando un modelo ligero.
+    Evalua la respuesta del agente usando heurísticas locales (sin LLM secundario).
     Retorna {"passed": bool, "issues": str, "suggestion": str}
     """
     if not ENABLED or not response_text or len(response_text) < 20:
         return {"passed": True, "issues": "", "suggestion": ""}
 
-    try:
-        # Usar el provider actual pero con max_tokens reducido
-        critic_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres un crítico de calidad. Evalúa si la respuesta del agente: "
-                    "1) Responde directamente a la pregunta del usuario "
-                    "2) Es factualmente correcta (no alucina) "
-                    "3) Está completa y no cortada "
-                    "4) No contiene errores, advertencias o placeholders "
-                    "Responde SOLO con un JSON: "
-                    '{"passed": true/false, "issues": "descripción breve si hay problemas", '
-                    '"suggestion": "qué mejorar"}'
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"Pregunta del usuario: {user_message[:500]}\n\nRespuesta del agente:\n{response_text[:2000]}",
-            },
-        ]
+    issues = []
 
-        # Usar el cliente OpenAI del agente para la crítica
-        if agent and hasattr(agent, "_get_api_client"):
-            client = agent._get_api_client()
-            critic_resp = client.chat.completions.create(
-                model=agent.model,
-                messages=critic_messages,
-                max_tokens=300,
-                temperature=0.1,
-            )
-            text = critic_resp.choices[0].message.content
-            # Intentar parsear como JSON
-            if text:
-                # Buscar JSON en la respuesta
-                import re
+    # 1. Check for truncation / cut-off sentences
+    if response_text.rstrip()[-1] in ",;:yY" if response_text.rstrip() else False:
+        pass
+    if len(response_text) > 10 and not response_text.rstrip()[-1] in ".!?\n":
+        # Count lines - if last line doesn't end with punctuation, might be truncated
+        last_line = response_text.strip().split("\n")[-1].strip()
+        if last_line and not last_line[-1] in ".!?)\"'":
+            issues.append("Respuesta parece truncada (no termina en puntuacion)")
 
-                json_match = re.search(r"\{.*\}", text, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                    if not result.get("passed", True):
-                        logger.warning(
-                            f"CRITIC: {result.get('issues', 'sin detalle')[:200]}"
-                        )
-                    return result
-    except Exception as e:
-        logger.debug(f"Critic loop skipped: {e}")
+    # 2. Check for error messages leaked to user
+    error_patterns = ["traceback", "exception", "error:", "error:",
+                      "no such file", "command not found", "permission denied",
+                      "connection refused", "timeout", "failed:"]
+    resp_lower = response_text.lower()
+    for pat in error_patterns:
+        if pat in resp_lower:
+            issues.append(f"Contiene posible error: '{pat}'")
+            break
+
+    # 3. Check for placeholders / incomplete content
+    placeholder_patterns = ["[object", "[function", "[promise", "undefined",
+                            "null", "none", "fill this in", "todo", "fixme"]
+    for pat in placeholder_patterns:
+        if pat in resp_lower:
+            issues.append(f"Contiene placeholder: '{pat}'")
+
+    if issues:
+        logger.warning(f"CRITIC ({len(issues)} issues): {'; '.join(issues[:3])}")
+        return {
+            "passed": False,
+            "issues": "; ".join(issues[:3]),
+            "suggestion": "Revisar y corregir antes de entregar al usuario"
+        }
 
     return {"passed": True, "issues": "", "suggestion": ""}
 

@@ -481,5 +481,176 @@ def main():
     print(json.dumps(output, indent=2, ensure_ascii=False))
 
 
+# ── Semantic Matching ───────────────────────────────────────────────────
+# Uses sentence-transformers for embedding-based skill classification.
+# Supplements regex triggers when they don't capture intent.
+
+_SBERT_MODEL = None
+_SKILL_EMBEDDINGS = None
+_EMBEDDING_CACHE = os.path.expanduser("~/.hermes-enhanced/data/skill_embeddings.json")
+
+
+def _get_skill_descriptions() -> Dict[str, str]:
+    """Extract name + description from all SKILL.md frontmatter."""
+    descs = {}
+    if not SKILLS_DIR.exists():
+        return descs
+    for root, dirs, files in os.walk(SKILLS_DIR):
+        if "SKILL.md" not in files:
+            continue
+        try:
+            content = Path(root, "SKILL.md").read_text(encoding="utf-8", errors="replace")
+            if not content.startswith("---"):
+                continue
+            _, fm_part, _ = content.split("---", 2)
+            import yaml
+            fm = yaml.safe_load(fm_part)
+            if isinstance(fm, dict):
+                name = fm.get("name", "")
+                desc = fm.get("description", "")
+                if name:
+                    # Use name + description + category as the semantic signature
+                    cat = Path(root).parent.name
+                    descs[name] = f"{cat}: {name}. {desc}"
+        except Exception:
+            pass
+    return descs
+
+
+def _load_sbert():
+    global _SBERT_MODEL
+    if _SBERT_MODEL is None:
+        from sentence_transformers import SentenceTransformer
+        _SBERT_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+    return _SBERT_MODEL
+
+
+def _build_embedding_cache():
+    """Pre-compute and cache skill embeddings to disk."""
+    global _SKILL_EMBEDDINGS
+    descs = _get_skill_descriptions()
+    
+    # Try loading cache
+    if os.path.exists(_EMBEDDING_CACHE):
+        try:
+            with open(_EMBEDDING_CACHE) as f:
+                cached = json.load(f)
+            # Check if cache is still valid (same skills)
+            if set(cached.get("skills", {}).keys()) == set(descs.keys()):
+                _SKILL_EMBEDDINGS = cached["skills"]
+                return
+        except Exception:
+            pass
+    
+    # Build new embeddings
+    model = _load_sbert()
+    skill_names = list(descs.keys())
+    skill_texts = [descs[n] for n in skill_names]
+    
+    if not skill_texts:
+        _SKILL_EMBEDDINGS = {}
+        return
+    
+    embeddings = model.encode(skill_texts, normalize_embeddings=True)
+    _SKILL_EMBEDDINGS = {
+        name: emb.tolist() for name, emb in zip(skill_names, embeddings)
+    }
+    
+    # Cache to disk
+    os.makedirs(os.path.dirname(_EMBEDDING_CACHE), exist_ok=True)
+    with open(_EMBEDDING_CACHE, "w") as f:
+        json.dump({"skills": _SKILL_EMBEDDINGS}, f)
+
+
+def _cosine_similarity(a, b):
+    import numpy as np
+    a = np.array(a)
+    b = np.array(b)
+    return float(np.dot(a, b))
+
+
+def semantic_classify(message: str, threshold: float = 0.25) -> List[Dict]:
+    """Classify message using embedding similarity against skill descriptions."""
+    if _SKILL_EMBEDDINGS is None:
+        _build_embedding_cache()
+    if not _SKILL_EMBEDDINGS:
+        return []
+    
+    model = _load_sbert()
+    msg_emb = model.encode([message], normalize_embeddings=True)[0]
+    
+    results = []
+    for skill_name, skill_emb in _SKILL_EMBEDDINGS.items():
+        sim = _cosine_similarity(msg_emb, skill_emb)
+        if sim >= threshold:
+            results.append({
+                "skill": skill_name,
+                "relevance": round(sim * 10),  # normalize to match regex scale
+                "semantic_score": round(sim, 4),
+            })
+    
+    results.sort(key=lambda r: -r["semantic_score"])
+    return results
+
+
+def auto_load_semantic(message: str, max_skills: int = 5) -> List[str]:
+    """Hybrid: uses regex first, then supplements with semantic matching."""
+    # 1. Regex-based matching (fast path)
+    triggers = load_skill_triggers()
+    regex_results = classify(message, triggers)
+    selected = set()
+    
+    # High priority regex matches always win
+    for r in regex_results:
+        if r["skill"] in HIGH_PRIORITY and r["relevance"] >= 1:
+            selected.add(r["skill"])
+    
+    # Regular regex matches
+    for r in regex_results:
+        if r["relevance"] >= 1:
+            selected.add(r["skill"])
+    
+    # 2. Semantic matching supplements if we have room
+    if len(selected) < max_skills:
+        try:
+            semantic_results = semantic_classify(message)
+            for r in semantic_results:
+                if r["skill"] not in selected:
+                    selected.add(r["skill"])
+                    if len(selected) >= max_skills:
+                        break
+        except Exception:
+            pass  # Semantic matching is optional; fall through to regex-only
+    
+    return list(selected)[:max_skills]
+
+
 if __name__ == "__main__":
-    main()
+    # Override the main to use hybrid matching
+    import sys
+    if len(sys.argv) < 2:
+        message = sys.stdin.read().strip()
+    else:
+        message = " ".join(sys.argv[1:])
+    
+    if not message:
+        print(json.dumps({"skills": [], "message": "No input provided"}))
+        sys.exit(0)
+    
+    selected = auto_load_semantic(message)
+    triggers = load_skill_triggers()
+    regex_results = classify(message, triggers)
+    
+    try:
+        semantic_results = semantic_classify(message)
+    except Exception:
+        semantic_results = []
+    
+    output = {
+        "skills": selected,
+        "regex_matches": regex_results,
+        "semantic_matches": semantic_results,
+        "total_matches": len(selected),
+        "message_preview": message[:100],
+    }
+    print(json.dumps(output, indent=2, ensure_ascii=False))
