@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historial Medico - Sebastian Alvarez</title>
+<style>
+  :root {
+    --bg: #0b0b0e;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --txt: #f1f5f9;
+    --txt2: #cbd5e1;
+    --acc: #60a5fa;
+    --gr: #4ade80;
+    --grbg: rgba(74,222,128,0.1);
+    --rd: #f87171;
+    --rdbg: rgba(248,113,113,0.1);
+    --yl: #facc15;
+    --ylbg: rgba(250,204,21,0.1);
+    --or: #fb923c;
+    --orbg: rgba(251,146,60,0.1);
+    --bdr: #1e1e2e;
+    --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font-family: var(--font);
+    line-height: 1.5;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1a1a2e, #0f0f1a);
+    border-bottom: 1px solid var(--bdr);
+    padding: 20px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header p {
+    color: var(--txt2);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .header .stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .header .stat {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  /* Container */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--acc);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--bdr);
+    margin-bottom: 12px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--bdr);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+
+  /* Diagnostico / Summary */
+  .diag-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  @media (max-width: 600px) {
+    .diag-grid { grid-template-columns: 1fr; }
+  }
+  .diag-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--bdr);
+    background: var(--bg3);
+  }
+  .diag-item .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--txt2);
+    opacity: 0.7;
+  }
+  .diag-item .value {
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .diag-item .sub {
+    font-size: 11px;
+    color: var(--txt2);
+    margin-top: 2px;
+  }
+
+  /* Meds */
+  .med-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .med-row:last-child { border-bottom: none; }
+  .med-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--gr);
+    flex-shrink: 0;
+  }
+  .med-name { font-size: 13px; font-weight: 600; }
+  .med-detail { font-size: 11px; color: var(--txt2); }
+
+  /* Glucose strip */
+  .gluc-bar {
+    display: flex;
+    height: 20px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 6px 0;
+  }
+  .gluc-bar span {
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0,0,0,0.7);
+    font-weight: 700;
+    min-width: 20px;
+  }
+
+  /* Glucose table */
+  .gluc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .gluc-table th {
+    text-align: left;
+    padding: 6px 8px;
+    color: var(--txt2);
+    opacity: 0.7;
+    font-weight: 500;
+    border-bottom: 1px solid var(--bdr);
+  }
+  .gluc-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .gluc-val { font-weight: 600; }
+  .gluc-ok { color: var(--gr); }
+  .gluc-hi { color: var(--or); }
+  .gluc-lo { color: var(--rd); }
+
+  /* Exams by date */
+  .exam-date {
+    margin-bottom: 16px;
+  }
+  .exam-date-header {
+    position: sticky;
+    top: 110px;
+    background: var(--bg);
+    padding: 6px 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--bdr);
+    margin-bottom: 8px;
+  }
+  .exam-date-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .exam-date-header .lab-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--acc);
+    background: rgba(96,165,250,0.1);
+  }
+  .exam-date-header .cat-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    background: var(--bg3);
+    color: var(--txt2);
+  }
+
+  /* Exam row */
+  .exam-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .exam-row:nth-child(even) {
+    background: rgba(255,255,255,0.02);
+  }
+  .exam-row:hover {
+    background: rgba(96,165,250,0.05);
+  }
+  .exam-name {
+    font-weight: 400;
+    color: var(--txt);
+  }
+  .exam-result {
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .exam-ref {
+    font-size: 10px;
+    color: var(--txt2);
+    opacity: 0.6;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .exam-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+  }
+  .status-normal {
+    color: var(--gr);
+    background: var(--grbg);
+  }
+  .status-alto, .status-positivo {
+    color: var(--or);
+    background: var(--orbg);
+  }
+  .status-bajo {
+    color: var(--rd);
+    background: var(--rdbg);
+  }
+  .status-muy-alto {
+    color: var(--rd);
+    background: var(--rdbg);
+    font-weight: 700;
+  }
+
+  .cat-tag {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    background: rgba(96,165,250,0.08);
+    color: var(--acc);
+    margin-right: 4px;
+  }
+
+  /* Insulin table */
+  .ins-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .ins-table th, .ins-table td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .ins-table th {
+    color: var(--txt2);
+    opacity: 0.7;
+    font-weight: 500;
+    font-size: 10px;
+  }
+
+  .gluc-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .gluc-summary div {
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--bg3);
+  }
+  .gluc-summary .gval {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .gluc-summary .glabel {
+    font-size: 9px;
+    color: var(--txt2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .scroll-top {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--acc);
+    color: white;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    z-index: 200;
+  }
+  .scroll-top:hover { opacity: 1; }
+
+  @media print {
+    .header { position: static; }
+    .exam-date-header { position: static; }
+    .scroll-top { display: none; }
+    body { background: white; color: black; }
+    .card { background: #f5f5f5; border-color: #ddd; }
+    .diag-item { background: #f0f0f0; }
+    .exam-row:nth-child(even) { background: #fafafa; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Sebastian Alvarez — Historial Medico</h1>
+  <p>Generado el 18 de junio 2026 | RUT 15.105.598-2 | Colmena</p>
+  <div class="stats">
+    <span class="stat" style="background:var(--grbg);color:var(--gr)">205 examenes</span>
+    <span class="stat" style="background:rgba(96,165,250,0.1);color:var(--acc)">305,308 lecturas glucosa</span>
+    <span class="stat" style="background:var(--ylbg);color:var(--yl)">21 fechas de laboratorio</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- DIAGNOSTICOS -->
+  <div class="section">
+    <div class="section-title">Resumen Medico</div>
+    <div class="diag-grid">
+      <div class="diag-item">
+        <div class="label">Diagnostico Principal</div>
+        <div class="value" style="color:var(--gr)">Diabetes Mellitus Tipo 1</div>
+        <div class="sub">Debut: Julio 2024 (HbA1c 11.3%, glucosa 328 mg/dL, cetoacidosis). Ultima HbA1c: 5.8% (Mayo 2026)</div>
+      </div>
+      <div class="diag-item">
+        <div class="label">Tiroides</div>
+        <div class="value" style="color:var(--or)">Tiroiditis de Hashimoto</div>
+        <div class="sub">Anti-TPO muy elevado (737.9 U/mL Oct 2025, 571.5 Mar 2026). TSH normal. Anti-celulas parietales alto (208 U/mL)</div>
+      </div>
+      <div class="diag-item">
+        <div class="label">Neurodivergencia</div>
+        <div class="value" style="color:var(--acc)">TEA Nivel 1 + TDAH + TAG</div>
+        <div class="sub">ADOS-2 Jun 2026: Comunicacion 2, Social 6, Total 9. Centro Avanzar Juntos. Resiliente (alto masking)</div>
+      </div>
+      <div class="diag-item">
+        <div class="label">Cardiovascular</div>
+        <div class="value" style="color:var(--gr)">Estable</div>
+        <div class="sub">Ecocardiograma normal (FE 60%). ECG: ritmo sinusal</div>
+      </div>
+      <div class="diag-item">
+        <div class="label">Riesgo Cardiovascular</div>
+        <div class="value" style="color:var(--or)">HDL bajo (27), Trigliceridos alto (222)</div>
+        <div class="sub">Colesterol LDL 82.6 (optimo). Tiene resistencia insulinica asociada a DM1</div>
+      </div>
+      <div class="diag-item">
+        <div class="label">Gastrointestinal</div>
+        <div class="value" style="color:var(--acc)">Cardias Incompetente</div>
+        <div class="sub">Endoscopia Nov 2024. Colonoscopia normal. Anti-celulas parietales positivo (riesgo gastritis autoinmune)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEDICAMENTOS -->
+  <div class="section">
+    <div class="section-title">Medicamentos Activos</div>
+    <div class="card">
+
+      <div class="med-row">
+        <div class="med-dot"></div>
+        <div>
+          <div class="med-name">Amlodipino</div>
+          <div class="med-detail">5 mg — cada 24 horas</div>
+        </div>
+      </div>
+      <div class="med-row">
+        <div class="med-dot"></div>
+        <div>
+          <div class="med-name">Enalapril</div>
+          <div class="med-detail">5 mg — cada 12 horas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSULINA -->
+  <div class="section">
+    <div class="section-title">Insulina — Historial</div>
+    <div class="card">
+      <table class="ins-table">
+        <tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Dosis</th><th>Notas</th></tr>
+        <tr><td>2026-05-25</td><td>22:11</td><td>basal</td><td>10.0 U</td><td style="color:var(--txt2);font-size:11px">nocturna</td></tr>
+        <tr><td>2026-05-23</td><td>09:30</td><td>basal</td><td>10.0 U</td><td style="color:var(--txt2);font-size:11px">Aplicada</td></tr>
+        <tr><td>2026-05-19</td><td>22:45</td><td>basal</td><td>10.0 U</td><td style="color:var(--txt2);font-size:11px">dosis nocturna</td></tr>
+        <tr><td>2026-05-12</td><td>07:09</td><td>basal</td><td>10.0 U</td><td style="color:var(--txt2);font-size:11px"></td></tr>
+        <tr><td>2026-05-11</td><td>23:13</td><td>basal</td><td>10.0 U</td><td style="color:var(--txt2);font-size:11px">pm</td></tr>
+
+      </table>
+    </div>
+  </div>
+
+  <!-- GLUCOSA -->
+  <div class="section">
+    <div class="section-title">Glucosa — Monitoreo Continuo (LibreLink)</div>
+    <div class="card">
+      <div class="gluc-summary">
+        <div><div class="gval" style="color:var(--acc)">118.9</div><div class="glabel">Promedio Total</div></div>
+        <div><div class="gval" style="color:var(--gr)">55.0</div><div class="glabel">Minimo</div></div>
+        <div><div class="gval" style="color:var(--or)">237.0</div><div class="glabel">Maximo</div></div>
+        <div><div class="gval" style="color:var(--txt2);font-size:14px">305,308</div><div class="glabel">Lecturas Totales</div></div>
+      </div>
+      <table class="gluc-table">
+        <tr><th>Fecha</th><th>Promedio</th><th>Min</th><th>Max</th><th>Lecturas</th><th>Rango</th></tr>
+        <tr><td>2026-06-18</td><td class="gluc-val gluc-lo">83.6</td><td class="gluc-val">61.0</td><td class="gluc-val">111.0</td><td style="color:var(--txt2)">1357</td><td class="gluc-lo">⚠</td></tr>
+        <tr><td>2026-06-17</td><td class="gluc-val gluc-lo">117.4</td><td class="gluc-val">65.0</td><td class="gluc-val">202.0</td><td style="color:var(--txt2)">12478</td><td class="gluc-lo">⚠</td></tr>
+        <tr><td>2026-06-16</td><td class="gluc-val gluc-ok">123.2</td><td class="gluc-val">97.0</td><td class="gluc-val">161.0</td><td style="color:var(--txt2)">13313</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-15</td><td class="gluc-val gluc-hi">120.7</td><td class="gluc-val">93.0</td><td class="gluc-val">181.0</td><td style="color:var(--txt2)">13525</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-14</td><td class="gluc-val gluc-ok">111.6</td><td class="gluc-val">84.0</td><td class="gluc-val">144.0</td><td style="color:var(--txt2)">13397</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-13</td><td class="gluc-val gluc-ok">122.8</td><td class="gluc-val">78.0</td><td class="gluc-val">179.0</td><td style="color:var(--txt2)">13472</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-12</td><td class="gluc-val gluc-ok">116.9</td><td class="gluc-val">73.0</td><td class="gluc-val">172.0</td><td style="color:var(--txt2)">13437</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-11</td><td class="gluc-val gluc-hi">115.7</td><td class="gluc-val">75.0</td><td class="gluc-val">188.0</td><td style="color:var(--txt2)">13538</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-10</td><td class="gluc-val gluc-ok">113.9</td><td class="gluc-val">82.0</td><td class="gluc-val">159.0</td><td style="color:var(--txt2)">13517</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-09</td><td class="gluc-val gluc-ok">106.7</td><td class="gluc-val">80.0</td><td class="gluc-val">170.0</td><td style="color:var(--txt2)">14316</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-08</td><td class="gluc-val gluc-ok">118.3</td><td class="gluc-val">78.0</td><td class="gluc-val">168.0</td><td style="color:var(--txt2)">14750</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-06-07</td><td class="gluc-val gluc-lo">98.9</td><td class="gluc-val">65.0</td><td class="gluc-val">180.0</td><td style="color:var(--txt2)">14892</td><td class="gluc-lo">⚠</td></tr>
+        <tr><td>2026-06-06</td><td class="gluc-val gluc-lo">102.0</td><td class="gluc-val">55.0</td><td class="gluc-val">148.0</td><td style="color:var(--txt2)">14797</td><td class="gluc-lo">⚠</td></tr>
+        <tr><td>2026-06-05</td><td class="gluc-val gluc-hi">121.5</td><td class="gluc-val">72.0</td><td class="gluc-val">191.0</td><td style="color:var(--txt2)">14887</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-04</td><td class="gluc-val gluc-hi">121.6</td><td class="gluc-val">76.0</td><td class="gluc-val">206.0</td><td style="color:var(--txt2)">14726</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-03</td><td class="gluc-val gluc-hi">120.3</td><td class="gluc-val">82.0</td><td class="gluc-val">187.0</td><td style="color:var(--txt2)">14807</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-02</td><td class="gluc-val gluc-hi">136.3</td><td class="gluc-val">85.0</td><td class="gluc-val">237.0</td><td style="color:var(--txt2)">14022</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-06-01</td><td class="gluc-val gluc-hi">129.3</td><td class="gluc-val">89.0</td><td class="gluc-val">186.0</td><td style="color:var(--txt2)">13966</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-05-31</td><td class="gluc-val gluc-hi">125.0</td><td class="gluc-val">71.0</td><td class="gluc-val">186.0</td><td style="color:var(--txt2)">13648</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-05-30</td><td class="gluc-val gluc-hi">134.4</td><td class="gluc-val">86.0</td><td class="gluc-val">203.0</td><td style="color:var(--txt2)">13385</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-05-29</td><td class="gluc-val gluc-hi">123.8</td><td class="gluc-val">75.0</td><td class="gluc-val">189.0</td><td style="color:var(--txt2)">13646</td><td class="gluc-hi">⚠</td></tr>
+        <tr><td>2026-05-28</td><td class="gluc-val gluc-lo">121.0</td><td class="gluc-val">68.0</td><td class="gluc-val">178.0</td><td style="color:var(--txt2)">13475</td><td class="gluc-lo">⚠</td></tr>
+        <tr><td>2026-05-27</td><td class="gluc-val gluc-ok">120.4</td><td class="gluc-val">95.0</td><td class="gluc-val">175.0</td><td style="color:var(--txt2)">11696</td><td class="gluc-ok">✓</td></tr>
+        <tr><td>2026-05-26</td><td class="gluc-val gluc-ok">124.8</td><td class="gluc-val">106.0</td><td class="gluc-val">148.0</td><td style="color:var(--txt2)">261</td><td class="gluc-ok">✓</td></tr>
+
+      </table>
+    </div>
+  </div>
+
+  <!-- EXAMENES -->
+  <div class="section">
+    <div class="section-title">Examenes de Laboratorio (205 registros)</div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2026-05-29</h2>
+        <span class="lab-badge">BioNet Rancagua</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span><span class="cat-badge">hierro</span><span class="cat-badge">hepatico</span><span class="cat-badge">hematologia</span><span class="cat-badge">diabetes</span><span class="cat-badge">general</span><span class="cat-badge">lipidico</span><span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">48 examenes | <span style="color:var(--or)">8 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">general</span><span class="exam-name">Proteina C Reactiva (PCR)</span></div>
+        <div class="exam-result">0.3 mg/dL</div>
+        <div class="exam-ref">0.0 - 0.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina B12 Serico</span></div>
+        <div class="exam-result">362.0 pg/mL</div>
+        <div class="exam-ref">211.0 - 1911.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hierro</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">108.1 ng/mL</div>
+        <div class="exam-ref">22.0 - 322.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina</span></div>
+        <div class="exam-result">0.99 mg/dL</div>
+        <div class="exam-ref">0.7 - 1.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glucosa</span></div>
+        <div class="exam-result">119.0 mg/dL</div>
+        <div class="exam-ref">70.0 - 100.0 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Sodio</span></div>
+        <div class="exam-result">139.0 mEq/L</div>
+        <div class="exam-ref">136.0 - 145.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Potasio</span></div>
+        <div class="exam-result">4.9 mEq/L</div>
+        <div class="exam-ref">3.5 - 5.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Cloro</span></div>
+        <div class="exam-result">102.0 mEq/L</div>
+        <div class="exam-ref">98.0 - 107.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">HbA1c (%)</span></div>
+        <div class="exam-result">5.8 %</div>
+        <div class="exam-ref">< 5.7 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">HbA1c (mmol/mol)</span></div>
+        <div class="exam-result">39.9 mmol/mol</div>
+        <div class="exam-ref">< 39 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Nitrogeno Ureico</span></div>
+        <div class="exam-result">21.0 mg/dL</div>
+        <div class="exam-ref">7.0 - 23.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Uremia</span></div>
+        <div class="exam-result">45.0 mg/dL</div>
+        <div class="exam-ref">15.0 - 49.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">lipidico</span><span class="exam-name">Colesterol Total</span></div>
+        <div class="exam-result">154.0 mg/dL</div>
+        <div class="exam-ref">50.0 - 200.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">lipidico</span><span class="exam-name">Colesterol HDL</span></div>
+        <div class="exam-result">27.0 mg/dL</div>
+        <div class="exam-ref">40.0 - 60.0 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">lipidico</span><span class="exam-name">Colesterol LDL</span></div>
+        <div class="exam-result">82.6 mg/dL</div>
+        <div class="exam-ref">Optimo < 100 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">lipidico</span><span class="exam-name">Colesterol VLDL</span></div>
+        <div class="exam-result">44.4 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">lipidico</span><span class="exam-name">Trigliceridos</span></div>
+        <div class="exam-result">222.0 mg/dL</div>
+        <div class="exam-ref"><= 150 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Bilirrubina Total</span></div>
+        <div class="exam-result">0.4 mg/dL</div>
+        <div class="exam-ref">0.3 - 1.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Bilirrubina Directa</span></div>
+        <div class="exam-result">0.12 mg/dL</div>
+        <div class="exam-ref">0.0 - 0.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Bilirrubina Indirecta</span></div>
+        <div class="exam-result">0.28 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">AST/SGOT</span></div>
+        <div class="exam-result">26.0 U/L</div>
+        <div class="exam-ref">5.0 - 37.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">ALT/SGPT</span></div>
+        <div class="exam-result">56.0 U/L</div>
+        <div class="exam-ref">16.0 - 63.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Fosfatasa Alcalina</span></div>
+        <div class="exam-result">109.0 U/L</div>
+        <div class="exam-ref">46.0 - 116.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">GGT</span></div>
+        <div class="exam-result">59.0 U/L</div>
+        <div class="exam-ref">15.0 - 85.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Tiempo Protrombina</span></div>
+        <div class="exam-result">10.7 seg</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">Protrombina (%)</span></div>
+        <div class="exam-result">101.6 %</div>
+        <div class="exam-ref">70.0 - 130.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">INR</span></div>
+        <div class="exam-result">0.99</div>
+        <div class="exam-ref">0.9 - 1.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hepatico</span><span class="exam-name">FIB-4</span></div>
+        <div class="exam-result">0.42</div>
+        <div class="exam-ref">< 1.30 = sin fibrosis <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">25-OH Vitamina D Total</span></div>
+        <div class="exam-result">30.9 ng/mL</div>
+        <div class="exam-ref">20.0 - 100.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Eritrocitos</span></div>
+        <div class="exam-result">5.51 M/uL</div>
+        <div class="exam-ref">4.5 - 5.9 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Hemoglobina</span></div>
+        <div class="exam-result">15.6 gr/dL</div>
+        <div class="exam-ref">13.0 - 17.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Hematocrito</span></div>
+        <div class="exam-result">45.5 %</div>
+        <div class="exam-ref">41.0 - 49.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">VCM</span></div>
+        <div class="exam-result">82.5 fL</div>
+        <div class="exam-ref">82.0 - 99.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">HCM</span></div>
+        <div class="exam-result">28.4 pg</div>
+        <div class="exam-ref">28.0 - 32.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">CHCM</span></div>
+        <div class="exam-result">34.4 gr/dL</div>
+        <div class="exam-ref">32.0 - 36.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">RDW</span></div>
+        <div class="exam-result">15.0 %</div>
+        <div class="exam-ref">11.5 - 14.5 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Plaquetas</span></div>
+        <div class="exam-result">327.0 k/uL</div>
+        <div class="exam-ref">150.0 - 350.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">6.8 k/uL</div>
+        <div class="exam-ref">4.1 - 9.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">VHS</span></div>
+        <div class="exam-result">2.0 mm/hr</div>
+        <div class="exam-ref">2.0 - 22.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Neutrofilos</span></div>
+        <div class="exam-result">65.0 %</div>
+        <div class="exam-ref">50.0 - 75.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Linfocitos</span></div>
+        <div class="exam-result">24.0 %</div>
+        <div class="exam-ref">20.0 - 35.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Monocitos</span></div>
+        <div class="exam-result">8.0 %</div>
+        <div class="exam-ref">4.0 - 8.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Eosinofilos</span></div>
+        <div class="exam-result">3.0 %</div>
+        <div class="exam-ref">1.0 - 3.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Microalbuminuria</span></div>
+        <div class="exam-result">4.7 mg/L</div>
+        <div class="exam-ref">< 30 mg/24h <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Densidad Orina</span></div>
+        <div class="exam-result">1.03</div>
+        <div class="exam-ref">1.015 - 1.025 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">pH Orina</span></div>
+        <div class="exam-result">6.0</div>
+        <div class="exam-ref">5.0 - 7.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Hemoglobina en Orina</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref"> <span class="exam-status status-alto">Positivo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">2.01 mUI/L</div>
+        <div class="exam-ref">0.55 - 4.78 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2026-03-25</h2>
+        <span class="lab-badge">BioNet</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">hierro</span><span class="cat-badge">diabetes</span><span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">8 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">3.66 mUI/L</div>
+        <div class="exam-ref">0.55 - 4.78 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T4L</span></div>
+        <div class="exam-result">1.16 ng/dL</div>
+        <div class="exam-ref">0.89 - 1.76 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Anti-TPO</span></div>
+        <div class="exam-result">571.5 U/mL</div>
+        <div class="exam-ref">13.8 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">HbA1c</span></div>
+        <div class="exam-result">5.3 %</div>
+        <div class="exam-ref">5.7 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina</span></div>
+        <div class="exam-result">1.2 mg/dL</div>
+        <div class="exam-ref">0.7 - 1.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">N. Ureico</span></div>
+        <div class="exam-result">12.0 mg/dL</div>
+        <div class="exam-ref">7.0 - 23.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hierro</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">48.9 ng/mL</div>
+        <div class="exam-ref">22.0 - 322.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Microalbuminuria</span></div>
+        <div class="exam-result">4.8 mg/L</div>
+        <div class="exam-ref">30.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-10-28</h2>
+        <span class="lab-badge">BioNet</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">diabetes</span><span class="cat-badge">gastrico</span><span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">27 examenes | <span style="color:var(--or)">3 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina B12</span></div>
+        <div class="exam-result">363.0 pg/mL</div>
+        <div class="exam-ref">211.0 - 911.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina en sangre</span></div>
+        <div class="exam-result">1.11 mg/dL</div>
+        <div class="exam-ref">0.7 - 1.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Sodio</span></div>
+        <div class="exam-result">141.0 mEq/L</div>
+        <div class="exam-ref">136 - 145 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Potasio</span></div>
+        <div class="exam-result">4.8 mEq/L</div>
+        <div class="exam-ref">3.5 - 5.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Cloro</span></div>
+        <div class="exam-result">103.0 mEq/L</div>
+        <div class="exam-ref">98 - 107 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Hemoglobina Glicosilada (HbA1c)</span></div>
+        <div class="exam-result">6.6 %</div>
+        <div class="exam-ref">< 5.7 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glucosa en sangre</span></div>
+        <div class="exam-result">116.0 mg/dL</div>
+        <div class="exam-ref">70 - 100 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Nitrógeno Ureico (BUN)</span></div>
+        <div class="exam-result">13.0 mg/dL</div>
+        <div class="exam-ref">7 - 23 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol Total</span></div>
+        <div class="exam-result">151.0 mg/dL</div>
+        <div class="exam-ref">50 - 200 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ácido Úrico</span></div>
+        <div class="exam-result">4.1 mg/dL</div>
+        <div class="exam-ref">3.5 - 7.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Proteínas Totales</span></div>
+        <div class="exam-result">7.6 gr/dL</div>
+        <div class="exam-ref">5.7 - 8.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Albúmina</span></div>
+        <div class="exam-result">3.9 gr/dL</div>
+        <div class="exam-ref">3.4 - 5.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Calcio</span></div>
+        <div class="exam-result">9.3 mg/dL</div>
+        <div class="exam-ref">8.3 - 10.6 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Fósforo</span></div>
+        <div class="exam-result">3.2 mg/dL</div>
+        <div class="exam-ref">2.4 - 5.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Fosfatasa Alcalina</span></div>
+        <div class="exam-result">109.0 U/L</div>
+        <div class="exam-ref">46 - 116 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">LDH</span></div>
+        <div class="exam-result">153.0 U/L</div>
+        <div class="exam-ref">85 - 227 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">SGOT (AST)</span></div>
+        <div class="exam-result">29.0 U/L</div>
+        <div class="exam-ref">5.0 - 37.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Bilirrubina Total</span></div>
+        <div class="exam-result">0.5 mg/dL</div>
+        <div class="exam-ref">0.3 - 1.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina D (25-OH)</span></div>
+        <div class="exam-result">37.9 ng/mL</div>
+        <div class="exam-ref">20 - 100 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">6.4 x10^3/uL</div>
+        <div class="exam-ref">4.1 - 9.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Hemoglobina</span></div>
+        <div class="exam-result">15.9 gr/dL</div>
+        <div class="exam-ref">13.0 - 17.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Plaquetas</span></div>
+        <div class="exam-result">266.0 x10^3/uL</div>
+        <div class="exam-ref">150 - 350 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Peroxidasa Tiroídea (TPO)</span></div>
+        <div class="exam-result">737.9 U/mL</div>
+        <div class="exam-ref">Menor a 13.8 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Tiroglobulina</span></div>
+        <div class="exam-result">1.3 UI/mL</div>
+        <div class="exam-ref">Hasta 4.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">4.07 mUI/L</div>
+        <div class="exam-ref">0.55 - 4.78 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T4 Libre</span></div>
+        <div class="exam-result">1.18 ng/dL</div>
+        <div class="exam-ref">0.89 - 1.76 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T3</span></div>
+        <div class="exam-result">1.52 ng/mL</div>
+        <div class="exam-ref">0.6 - 1.81 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-07-28</h2>
+        <span class="lab-badge">UC CHRISTUS</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">7 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Anti-Tiroglobulina</span></div>
+        <div class="exam-result">3.81 UI/mL</div>
+        <div class="exam-ref">4.11 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Cortisol Sérico</span></div>
+        <div class="exam-result">13.9 ug/dL</div>
+        <div class="exam-ref">6.0 - 18.4 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">ACTH</span></div>
+        <div class="exam-result">18.0 pg/mL</div>
+        <div class="exam-ref">10.0 - 60.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Aldosterona</span></div>
+        <div class="exam-result">6.8 ng/dL</div>
+        <div class="exam-ref">1.2 - 23.6 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">DHEA-S</span></div>
+        <div class="exam-result">0.44 ug/mL</div>
+        <div class="exam-ref">0.8 - 5.6 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Folato Eritrocitario</span></div>
+        <div class="exam-result">639.8 ng/mL</div>
+        <div class="exam-ref">523.0 - 1257.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Hemoglobina</span></div>
+        <div class="exam-result">16.2 g/dL</div>
+        <div class="exam-ref">Normal <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-07-25</h2>
+        <span class="lab-badge">UC CHRISTUS</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">14 examenes | <span style="color:var(--or)">2 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Cortisol</span></div>
+        <div class="exam-result">13.9 ug/dL</div>
+        <div class="exam-ref">6.02 - 18.4 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">LH</span></div>
+        <div class="exam-result">4.1 mUI/mL</div>
+        <div class="exam-ref">1.5 - 12.4 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">FSH</span></div>
+        <div class="exam-result">1.6 mUI/mL</div>
+        <div class="exam-ref">1.0 - 14.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Peroxidasa Tiroídea (TPO)</span></div>
+        <div class="exam-result">681.04 UI/mL</div>
+        <div class="exam-ref">Hasta 5.61 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Tiroglobulina</span></div>
+        <div class="exam-result">3.81 UI/mL</div>
+        <div class="exam-ref">Hasta 4.11 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">ACTH</span></div>
+        <div class="exam-result">18.0 pg/mL</div>
+        <div class="exam-ref">10 - 60 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">DHEA-SO4</span></div>
+        <div class="exam-result">0.44 ug/mL</div>
+        <div class="exam-ref">0.80 - 5.60 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Aldosterona</span></div>
+        <div class="exam-result">6.8 ng/dL</div>
+        <div class="exam-ref">1.2 - 23.6 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Hormona Paratiroídea (PTH)</span></div>
+        <div class="exam-result">47.0 pg/mL</div>
+        <div class="exam-ref">17.3 - 74.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Testosterona Total</span></div>
+        <div class="exam-result">488.0 ng/dL</div>
+        <div class="exam-ref">249.0 - 836.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">153.0 ng/mL</div>
+        <div class="exam-ref">30 - 400 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Folato Eritrocitario</span></div>
+        <div class="exam-result">639.8 ng/mL</div>
+        <div class="exam-ref">523 - 1257 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Folato Sérico</span></div>
+        <div class="exam-result">13.1 ng/mL</div>
+        <div class="exam-ref">3.89 - 26.8 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">5.8 x10^3/uL</div>
+        <div class="exam-ref">4.5 - 11.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-06-06</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">tiroides</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">2 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Células Parietales</span></div>
+        <div class="exam-result">208.0 U/mL</div>
+        <div class="exam-ref">< 12.0 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Factor Intrínseco</span></div>
+        <div class="exam-result">-1.0 U/mL</div>
+        <div class="exam-ref">< 12.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-06-04</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">6 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. IgA Transglutaminasa</span></div>
+        <div class="exam-result">1.5 UI/mL</div>
+        <div class="exam-ref">< 9.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina D (25-OH)</span></div>
+        <div class="exam-result">31.6 ng/mL</div>
+        <div class="exam-ref">30 - 100 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina B12</span></div>
+        <div class="exam-result">418.0 pg/mL</div>
+        <div class="exam-ref">239 - 931 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">6.03 mUI/L</div>
+        <div class="exam-ref">0.40 - 4.05 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T4 Libre</span></div>
+        <div class="exam-result">1.01 ng/dL</div>
+        <div class="exam-ref">0.78 - 2.19 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">246.0 ng/mL</div>
+        <div class="exam-ref">17.9 - 464 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-06-01</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">tiroides</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">2 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">6.03 mUI/L</div>
+        <div class="exam-ref">0.4 - 4.05 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T4 Libre</span></div>
+        <div class="exam-result">1.01 ng/dL</div>
+        <div class="exam-ref">0.78 - 2.19 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2025-04-02</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">diabetes</span><span class="cat-badge">vitaminas</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">7 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Hemoglobina Glicosilada (HbA1c)</span></div>
+        <div class="exam-result">5.7 %</div>
+        <div class="exam-ref">< 5.7 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">22.6 ng/mL</div>
+        <div class="exam-ref">17.9 - 464 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ferremia</span></div>
+        <div class="exam-result">92.0 ug/dL</div>
+        <div class="exam-ref">49 - 181 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina D (25-OH)</span></div>
+        <div class="exam-result">29.2 ng/mL</div>
+        <div class="exam-ref">30 - 100 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina B12</span></div>
+        <div class="exam-result">405.0 pg/mL</div>
+        <div class="exam-ref">239 - 931 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ácido Fólico</span></div>
+        <div class="exam-result">6.0 ng/mL</div>
+        <div class="exam-ref">2.80 - 20.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Transferrina</span></div>
+        <div class="exam-result">266.0 mg/dL</div>
+        <div class="exam-ref">210 - 430 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-11-27</h2>
+        <span class="lab-badge">ISAMEDICA</span>
+        <span class="cat-badge">gastrico</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">2 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Endoscopía Digestiva Alta</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Normal <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Colonoscopía</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Normal <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-11-15</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">1 examenes</span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Proteinuria 24 Hrs</span></div>
+        <div class="exam-result">0.06 gr/24 Hrs</div>
+        <div class="exam-ref">0.04 - 0.23 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-11-12</h2>
+        <span class="lab-badge">Cardiohiggins, FUSAT, Atrys</span>
+        <span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">gastrico</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">5 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ferritina</span></div>
+        <div class="exam-result">7.4 ng/mL</div>
+        <div class="exam-ref">17.9 - 464 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Vitamina B12</span></div>
+        <div class="exam-result">340.0 pg/mL</div>
+        <div class="exam-ref">239 - 931 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">PCR</span></div>
+        <div class="exam-result">5.0 mg/L</div>
+        <div class="exam-ref">0 - 10 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Ecotomografía Abdominal</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Normal <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Ecocardiograma</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Normal <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-10-22</h2>
+        <span class="lab-badge">UC CHRISTUS</span>
+        <span class="cat-badge">tiroides</span><span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">diabetes</span><span class="cat-badge">gastrico</span><span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">27 examenes | <span style="color:var(--or)">2 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Hemoglobina Glicosilada (HbA1c)</span></div>
+        <div class="exam-result">5.5 %</div>
+        <div class="exam-ref">< 5.7 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glucosa Promedio Estimada</span></div>
+        <div class="exam-result">111.0 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Microalbuminuria</span></div>
+        <div class="exam-result">0.7 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina en Orina</span></div>
+        <div class="exam-result">163.2 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Índice Microalb/Creatinina</span></div>
+        <div class="exam-result">4.3 mg/g Crea</div>
+        <div class="exam-ref">< 30 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina en sangre</span></div>
+        <div class="exam-result">0.98 mg/dL</div>
+        <div class="exam-ref">0.70 - 1.20 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Filtrado Glomerular (GFR)</span></div>
+        <div class="exam-result">97.0 mL/min/1.73</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Nitrógeno Ureico (BUN)</span></div>
+        <div class="exam-result">21.0 mg/dL</div>
+        <div class="exam-ref">8.9 - 25 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">TSH</span></div>
+        <div class="exam-result">2.83 uUI/mL</div>
+        <div class="exam-ref">0.27 - 4.20 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">T4 Total</span></div>
+        <div class="exam-result">7.7 ug/dL</div>
+        <div class="exam-ref">5.1 - 14.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Insulina (IAA)</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Negativo <span class="exam-status status-alto">Positivo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti GAD</span></div>
+        <div class="exam-result">5.0 UI/mL</div>
+        <div class="exam-ref">< 10.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti IA2</span></div>
+        <div class="exam-result">10.0 UI/mL</div>
+        <div class="exam-ref">< 10.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti ZnT8</span></div>
+        <div class="exam-result">10.0 u/mL</div>
+        <div class="exam-ref">< 15.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">tiroides</span><span class="exam-name">Ac. Anti Células Beta (ICA)</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Negativo <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol Total</span></div>
+        <div class="exam-result">161.0 mg/dL</div>
+        <div class="exam-ref">< 200 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Triglicéridos</span></div>
+        <div class="exam-result">123.0 mg/dL</div>
+        <div class="exam-ref">< 150 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol HDL</span></div>
+        <div class="exam-result">34.0 mg/dL</div>
+        <div class="exam-ref">>= 40 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol LDL</span></div>
+        <div class="exam-result">102.0 mg/dL</div>
+        <div class="exam-ref">< 130 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol VLDL</span></div>
+        <div class="exam-result">25.0 mg/dL</div>
+        <div class="exam-ref"> <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">SGOT (AST)</span></div>
+        <div class="exam-result">24.0 U/L</div>
+        <div class="exam-ref">Hasta 50 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">SGPT (ALT)</span></div>
+        <div class="exam-result">24.0 U/L</div>
+        <div class="exam-ref">Hasta 50 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">GGT</span></div>
+        <div class="exam-result">18.0 U/L</div>
+        <div class="exam-ref">Hasta 60 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Fosfatasa Alcalina</span></div>
+        <div class="exam-result">103.0 U/L</div>
+        <div class="exam-ref">45 - 115 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Bilirrubina Total</span></div>
+        <div class="exam-result">0.44 mg/dL</div>
+        <div class="exam-ref">Hasta 1.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Índice FIB-4</span></div>
+        <div class="exam-result">0.59</div>
+        <div class="exam-ref">< 1.30 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">7.0 x10^3/uL</div>
+        <div class="exam-ref">4.5 - 11.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-10-01</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">diabetes</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">1 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Anti-Insulina (IAA)</span></div>
+        <div class="exam-result"> -</div>
+        <div class="exam-ref">Negativo <span class="exam-status status-alto">Alto</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-08-06</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">renal</span><span class="cat-badge">suprarrenal</span><span class="cat-badge">hematologia</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">3 examenes</span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Examen de Orina</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Normal <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Venoso</span></div>
+        <div class="exam-result">7.35</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">4.84 x10^3/uL</div>
+        <div class="exam-ref">4.0 - 10.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-27</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">1 examenes</span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Arterial</span></div>
+        <div class="exam-result">7.4</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-26</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">diabetes</span><span class="cat-badge">renal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">2 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glucosa en sangre</span></div>
+        <div class="exam-result">310.0 mg/dL</div>
+        <div class="exam-ref">74 - 106 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina</span></div>
+        <div class="exam-result">0.67 mg/dL</div>
+        <div class="exam-ref">0.66 - 1.25 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-25</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">vitaminas</span><span class="cat-badge">renal</span><span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">4 examenes | <span style="color:var(--or)">2 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Magnesio</span></div>
+        <div class="exam-result">2.2 mg/dL</div>
+        <div class="exam-ref">1.6 - 2.3 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Lactato</span></div>
+        <div class="exam-result">4.5 mg/dL</div>
+        <div class="exam-ref">6.3 - 18.9 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina</span></div>
+        <div class="exam-result">0.65 mg/dL</div>
+        <div class="exam-ref">0.66 - 1.25 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Arterial (20:27 hrs)</span></div>
+        <div class="exam-result">7.41</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-24</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">renal</span><span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">5 examenes | <span style="color:var(--or)">4 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Glucosuria</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Negativo <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Cuerpos Cetónicos</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Negativo <span class="exam-status status-alto">Positivo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Arterial (13:46 hrs)</span></div>
+        <div class="exam-result">7.19</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Arterial (18:18 hrs)</span></div>
+        <div class="exam-result">7.22</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Venoso (23:07 hrs)</span></div>
+        <div class="exam-result">7.29</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-23</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">vitaminas</span><span class="cat-badge">hematologia</span><span class="cat-badge">diabetes</span><span class="cat-badge">gastrico</span><span class="cat-badge">renal</span><span class="cat-badge">suprarrenal</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">32 examenes | <span style="color:var(--or)">12 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glucosa en sangre</span></div>
+        <div class="exam-result">328.0 mg/dL</div>
+        <div class="exam-ref">74 - 106 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Hemoglobina Glicosilada (HbA1c)</span></div>
+        <div class="exam-result">11.3 %</div>
+        <div class="exam-ref">< 5.7 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pH Venoso</span></div>
+        <div class="exam-result">7.1</div>
+        <div class="exam-ref">7.35 - 7.45 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Bicarbonato</span></div>
+        <div class="exam-result">9.9 mmol/L</div>
+        <div class="exam-ref">22 - 26 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Exceso de Base</span></div>
+        <div class="exam-result">-18.6 mmol/L</div>
+        <div class="exam-ref">-2 a +2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">pCO2</span></div>
+        <div class="exam-result">32.0 mmHg</div>
+        <div class="exam-ref">35 - 45 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Sodio</span></div>
+        <div class="exam-result">135.0 mEq/L</div>
+        <div class="exam-ref">137 - 145 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Potasio</span></div>
+        <div class="exam-result">4.3 mEq/L</div>
+        <div class="exam-ref">3.5 - 5.1 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Cloro</span></div>
+        <div class="exam-result">108.0 mEq/L</div>
+        <div class="exam-ref">98 - 107 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Creatinina</span></div>
+        <div class="exam-result">1.0 mg/dL</div>
+        <div class="exam-ref">0.66 - 1.25 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">renal</span><span class="exam-name">Nitrógeno Ureico (BUN)</span></div>
+        <div class="exam-result">8.0 mg/dL</div>
+        <div class="exam-ref">9 - 20 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Amilasa</span></div>
+        <div class="exam-result">67.0 U/L</div>
+        <div class="exam-ref">30 - 100 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Lipasa</span></div>
+        <div class="exam-result">115.0 U/L</div>
+        <div class="exam-ref">23 - 300 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">suprarrenal</span><span class="exam-name">Creatinquinasa (CK) Total</span></div>
+        <div class="exam-result">78.0 U/L</div>
+        <div class="exam-ref">55 - 170 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">SGOT (AST)</span></div>
+        <div class="exam-result">23.0 U/L</div>
+        <div class="exam-ref">17 - 59 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">SGPT (ALT)</span></div>
+        <div class="exam-result">31.0 U/L</div>
+        <div class="exam-ref">0 - 50 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Fosfatasa Alcalina</span></div>
+        <div class="exam-result">158.0 U/L</div>
+        <div class="exam-ref">38 - 126 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">GGT</span></div>
+        <div class="exam-result">30.0 U/L</div>
+        <div class="exam-ref">15 - 73 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">gastrico</span><span class="exam-name">Bilirrubina Total</span></div>
+        <div class="exam-result">0.1 mg/dL</div>
+        <div class="exam-ref">0.2 - 1.3 <span class="exam-status status-bajo">Bajo</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Tiempo de Protrombina (TP)</span></div>
+        <div class="exam-result">95.0 %</div>
+        <div class="exam-ref">70 - 120 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Colesterol Total</span></div>
+        <div class="exam-result">236.0 mg/dL</div>
+        <div class="exam-ref">10 - 200 <span class="exam-status status-alto">Alto</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Ácido Úrico</span></div>
+        <div class="exam-result">6.4 mg/dL</div>
+        <div class="exam-ref">3.5 - 8.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Proteína Total</span></div>
+        <div class="exam-result">8.2 gr/dL</div>
+        <div class="exam-ref">6.3 - 8.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Albúmina</span></div>
+        <div class="exam-result">4.8 gr/dL</div>
+        <div class="exam-ref">3.5 - 5.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Calcio</span></div>
+        <div class="exam-result">9.0 mg/dL</div>
+        <div class="exam-ref">8.4 - 10.2 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">Fósforo</span></div>
+        <div class="exam-result">3.5 mg/dL</div>
+        <div class="exam-ref">2.5 - 4.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">vitaminas</span><span class="exam-name">LDH</span></div>
+        <div class="exam-result">165.0 U/L</div>
+        <div class="exam-ref">143 - 279 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Hemoglobina</span></div>
+        <div class="exam-result">15.3 gr/dL</div>
+        <div class="exam-ref">14.0 - 17.5 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Leucocitos</span></div>
+        <div class="exam-result">8.52 x10^3/uL</div>
+        <div class="exam-ref">4.0 - 10.0 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">Plaquetas</span></div>
+        <div class="exam-result">313.0 x10^3/uL</div>
+        <div class="exam-ref">150 - 400 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">hematologia</span><span class="exam-name">PCR</span></div>
+        <div class="exam-result">5.0 mg/L</div>
+        <div class="exam-ref">0 - 10 <span class="exam-status status-normal">Normal</span></div>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Cetonemia</span></div>
+        <div class="exam-result"></div>
+        <div class="exam-ref">Negativo <span class="exam-status status-alto">Positivo</span></div>
+      </div>
+    </div>
+
+    <div class="exam-date">
+      <div class="exam-date-header">
+        <h2 style="color:var(--txt)">2024-07-01</h2>
+        <span class="lab-badge">FUSAT</span>
+        <span class="cat-badge">diabetes</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--txt2)">1 examenes | <span style="color:var(--or)">1 alterados</span></span>
+      </div>
+      <div class="exam-row">
+        <div><span class="cat-tag">diabetes</span><span class="exam-name">Glicemia</span></div>
+        <div class="exam-result">364.0 mg/dL</div>
+        <div class="exam-ref">70.0 - 100.0 <span class="exam-status status-alto">Muy Alto</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<button class="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">&uarr;</button>
+
+<script>
+  // Category filter: highlight on hover
+  document.querySelectorAll('.cat-tag').forEach(tag => {
+    tag.addEventListener('click', function() {
+      const cat = this.textContent.trim();
+      const currentUrl = window.location.href.split('#')[0];
+      if (window.location.hash === '#cat-' + cat) {
+        window.location.hash = '';
+      } else {
+        window.location.hash = 'cat-' + cat;
+      }
+    });
+  });
+
+  // Hash-based filter
+  function applyFilter() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#cat-')) {
+      const cat = hash.replace('#cat-', '');
+      document.querySelectorAll('.exam-row').forEach(row => {
+        const cats = row.querySelector('.cat-tag');
+        row.style.display = (cats && cats.textContent.trim() === cat) ? 'grid' : 'none';
+      });
+      document.querySelectorAll('.exam-date-header span').forEach(s => {
+        if (s.textContent.trim() === cat) {
+          s.style.background = 'rgba(96,165,250,0.2)';
+        }
+      });
+    } else {
+      document.querySelectorAll('.exam-row').forEach(row => row.style.display = 'grid');
+      document.querySelectorAll('.exam-date-header span').forEach(s => s.style.background = '');
+    }
+  }
+
+  window.addEventListener('hashchange', applyFilter);
+  window.addEventListener('DOMContentLoaded', applyFilter);
+</script>
+</body>
+</html>

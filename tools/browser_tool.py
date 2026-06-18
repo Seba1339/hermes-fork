@@ -1048,7 +1048,13 @@ def _run_chrome_fallback_command(
         cmd_prefix = [_npx_bin, "agent-browser"]
     else:
         cmd_prefix = [browser_cmd]
-    base_args = cmd_prefix + ["--engine", "chrome", "--session", tmp_session, "--json"]
+    # If AGENT_BROWSER_EXECUTABLE_PATH is set, pass it as --executable-path
+    # (needed on ARM64 where Chrome for Testing builds aren't available)
+    _ab_exec = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    if _ab_exec and os.path.isfile(_ab_exec):
+        base_args = cmd_prefix + ["--executable-path", _ab_exec, "--engine", "chrome", "--session", tmp_session, "--json"]
+    else:
+        base_args = cmd_prefix + ["--engine", "chrome", "--session", tmp_session, "--json"]
 
     task_socket_dir = os.path.join(_socket_safe_tmpdir(), f"agent-browser-{tmp_session}")
     os.makedirs(task_socket_dir, mode=0o700, exist_ok=True)
@@ -2348,6 +2354,12 @@ def _run_browser_command(
     engine = _engine_override or _get_browser_engine()
     if engine != "auto" and not _is_camofox_mode() and not session_info.get("cdp_url"):
         backend_args += ["--engine", engine]
+
+    # If AGENT_BROWSER_EXECUTABLE_PATH is set, pass it as --executable-path
+    # (needed on ARM64 where Chrome for Testing builds aren't available)
+    _ab_exec = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    if _ab_exec and os.path.isfile(_ab_exec):
+        backend_args = ["--executable-path", _ab_exec] + backend_args
 
     # Keep concrete executable paths intact, even when they contain spaces.
     # Only the synthetic npx fallback needs to expand into multiple argv items.
