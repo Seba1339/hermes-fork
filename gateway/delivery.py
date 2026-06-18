@@ -397,7 +397,7 @@ class DeliveryRouter:
         if not adapter:
             raise ValueError(f"No adapter configured for {target.platform.value}")
         
-        if not target.chat_id:
+        if not target.chat_id and target.platform != Platform.API_SERVER:
             raise ValueError(f"No chat ID for {target.platform.value} delivery")
         
         # Guard: handle oversized cron output.

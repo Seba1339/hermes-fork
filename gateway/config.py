@@ -375,7 +375,6 @@ class SessionResetPolicy:
     # by the reset guard. Raise this if you run legitimate multi-day jobs whose
     # liveness should pin the conversation open.
     bg_process_max_age_hours: int = 24
-
     def to_dict(self) -> Dict[str, Any]:
         return {
             "mode": self.mode,

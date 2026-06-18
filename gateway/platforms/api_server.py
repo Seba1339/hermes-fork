@@ -5110,9 +5110,67 @@ class APIServerAdapter(BasePlatformAdapter):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         """
-        Not used — HTTP request/response cycle handles delivery directly.
+        Deliver cron output to the BuJo (bullet journal).
+        Supports date override via metadata["date"] (YYYY-MM-DD).
+        Supports section override via metadata["section"] (agenda|estado|mas).
+        chat_id is ignored — BuJo delivery doesn't need a chat target.
         """
-        return SendResult(success=False, error="API server uses HTTP request/response, not send()")
+        try:
+            import subprocess
+            from datetime import datetime
+
+            meta = metadata or {}
+            job_name = meta.get("job_name", meta.get("name", "Cron"))
+            target_date = meta.get("date", datetime.now().strftime("%Y-%m-%d"))
+            section = meta.get("section", "agenda")
+
+            # Truncate very long content
+            display = content[:600] if len(content) > 600 else content
+
+            # Use the bujo_tool.sh script for consistency
+            bujo_tool = "/home/ubuntu/.hermes/scripts/bujo_tool.sh"
+            
+            # Build args - title + detail lines
+            title = f"[{job_name}]"
+            detail_lines = [line for line in display.split("\n") if line.strip()]
+            if not detail_lines:
+                detail_lines = [display[:200]]
+
+            cmd = ["bash", bujo_tool, "add", title] + detail_lines + ["--date", target_date]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                logger.info(
+                    "[api_server] Delivered cron '%s' to BuJo on %s (section=%s)",
+                    job_name, target_date, section,
+                )
+                return SendResult(success=True)
+            
+            # Fallback: direct SQLite insert
+            import sqlite3
+            from hermes_cli.config import get_hermes_home
+            bujo_path = get_hermes_home() / "data" / "bujo.sqlite"
+            if bujo_path.exists():
+                conn = sqlite3.connect(str(bujo_path), timeout=10)
+                conn.execute(
+                    "INSERT INTO bujo_entries (date, section, item_type, content, depth, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                    (target_date, section, "task", f"{title} {display[:500]}", 0, 0),
+                )
+                conn.commit()
+                conn.close()
+                # Notify web clients via FastAPI
+                try:
+                    import urllib.request, json
+                    notify = json.dumps({"type":"bujo_update","date":target_date,"title":title,"job":job_name})
+                    urllib.request.urlopen("http://127.0.0.1:5052/api/notify", data=notify.encode(), timeout=1)
+                except Exception:
+                    pass
+                logger.info("[api_server] BuJo fallback insert OK for %s on %s", job_name, target_date)
+                return SendResult(success=True)
+            return SendResult(success=False, error=result.stderr or "bujo.sqlite not found")
+        except Exception as e:
+            logger.error("[api_server] BuJo delivery failed: %s", e)
+            return SendResult(success=False, error=str(e))
 
     async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
         """Return basic info about the API server."""
