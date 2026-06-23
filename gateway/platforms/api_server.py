@@ -5111,63 +5111,115 @@ class APIServerAdapter(BasePlatformAdapter):
     ) -> SendResult:
         """
         Deliver cron output to the BuJo (bullet journal).
+        Cleans the output: removes [Cron] headers, error noise, job IDs.
+        Writes concise entries to the proper section.
+        
         Supports date override via metadata["date"] (YYYY-MM-DD).
-        Supports section override via metadata["section"] (agenda|estado|mas).
+        Supports section override via metadata["section"] (journal|reportes|agenda|estado|mas).
         chat_id is ignored — BuJo delivery doesn't need a chat target.
         """
         try:
-            import subprocess
             from datetime import datetime
+            import re
 
             meta = metadata or {}
             job_name = meta.get("job_name", meta.get("name", "Cron"))
             target_date = meta.get("date", datetime.now().strftime("%Y-%m-%d"))
-            section = meta.get("section", "agenda")
-
-            # Truncate very long content
-            display = content[:600] if len(content) > 600 else content
-
-            # Use the bujo_tool.sh script for consistency
-            bujo_tool = "/home/ubuntu/.hermes/scripts/bujo_tool.sh"
+            section = meta.get("section", "reportes")
             
-            # Build args - title + detail lines
-            title = f"[{job_name}]"
-            detail_lines = [line for line in display.split("\n") if line.strip()]
-            if not detail_lines:
-                detail_lines = [display[:200]]
-
-            cmd = ["bash", bujo_tool, "add", title] + detail_lines + ["--date", target_date]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                logger.info(
-                    "[api_server] Delivered cron '%s' to BuJo on %s (section=%s)",
-                    job_name, target_date, section,
-                )
+            # Clean the content: remove noise lines
+            noise_patterns = [
+                r'^\[Cron\]$',
+                r'^Cronjob Response:',
+                r'^\(job_id:',
+                r'^─+$',
+                r'^-+$',
+                r'^=+$',
+                r'^⚠️.*failed:',
+                r'^To stop or manage',
+                r'^Script not found',
+                r'^\s*$',
+            ]
+            
+            lines = content.split("\n")
+            clean_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                skip = False
+                for pattern in noise_patterns:
+                    if re.match(pattern, stripped):
+                        skip = True
+                        break
+                if not skip:
+                    clean_lines.append(stripped)
+            
+            # If nothing meaningful remains, skip entirely
+            if not clean_lines:
+                logger.info("[api_server] Cron '%s': output was all noise, skipping BuJo write", job_name)
                 return SendResult(success=True)
             
-            # Fallback: direct SQLite insert
+            # Build one concise entry
+            summary = " | ".join(clean_lines[:4])
+            if len(clean_lines) > 4:
+                summary += f" | (+{len(clean_lines)-4} líneas)"
+            
+            # Truncate to reasonable length
+            if len(summary) > 600:
+                summary = summary[:597] + "..."
+            
+            entry_content = f"[{job_name}] {summary}"
+            
+            # Direct SQLite insert into proper section
             import sqlite3
             from hermes_cli.config import get_hermes_home
+            
             bujo_path = get_hermes_home() / "data" / "bujo.sqlite"
-            if bujo_path.exists():
-                conn = sqlite3.connect(str(bujo_path), timeout=10)
+            if not bujo_path.exists():
+                return SendResult(success=False, error="bujo.sqlite not found")
+            
+            conn = sqlite3.connect(str(bujo_path), timeout=15)
+            try:
+                # Get next sort_order for this date+section
+                cur = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM bujo_entries WHERE date=? AND section=?",
+                    (target_date, section)
+                )
+                next_sort = cur.fetchone()[0]
+                
                 conn.execute(
                     "INSERT INTO bujo_entries (date, section, item_type, content, depth, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-                    (target_date, section, "task", f"{title} {display[:500]}", 0, 0),
+                    (target_date, section, "note", entry_content, 0, next_sort),
                 )
                 conn.commit()
+                
+                logger.info(
+                    "[api_server] Delivered cron '%s' to BuJo on %s (section=%s) — %d chars",
+                    job_name, target_date, section, len(entry_content),
+                )
+            finally:
                 conn.close()
-                # Notify web clients via FastAPI
-                try:
-                    import urllib.request, json
-                    notify = json.dumps({"type":"bujo_update","date":target_date,"title":title,"job":job_name})
-                    urllib.request.urlopen("http://127.0.0.1:5052/api/notify", data=notify.encode(), timeout=1)
-                except Exception:
-                    pass
-                logger.info("[api_server] BuJo fallback insert OK for %s on %s", job_name, target_date)
-                return SendResult(success=True)
-            return SendResult(success=False, error=result.stderr or "bujo.sqlite not found")
+            
+            # Notify web clients via FastAPI
+            try:
+                import urllib.request, json
+                notify = json.dumps({
+                    "type": "bujo_update",
+                    "date": target_date,
+                    "content": entry_content[:120],
+                    "job": job_name,
+                    "section": section,
+                })
+                urllib.request.urlopen(
+                    "http://127.0.0.1:5052/api/notify",
+                    data=notify.encode(), timeout=1,
+                )
+            except Exception:
+                pass
+            
+            return SendResult(success=True)
+            
         except Exception as e:
             logger.error("[api_server] BuJo delivery failed: %s", e)
             return SendResult(success=False, error=str(e))
