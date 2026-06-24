@@ -143,6 +143,9 @@ TRIGGER_MAP: Dict[str, List[str]] = {
         r"flutter.*build", r"apk", r"aab", r"gradle",
         r"android.*compil", r"build.*flutter",
     ],
+    # NOTE: flutter-ci-build skill does NOT exist on disk.
+    # The flutter-bujo-build skill covers CI workflows instead.
+    # Remove this entry once the skill is created or the router is cleaned up.
     "flutter-ci-build": [
         r"ci.*flutter", r"github.*actions.*flutter", r"flutter.*ci",
     ],
