@@ -143,11 +143,10 @@ TRIGGER_MAP: Dict[str, List[str]] = {
         r"flutter.*build", r"apk", r"aab", r"gradle",
         r"android.*compil", r"build.*flutter",
     ],
-    # NOTE: flutter-ci-build skill does NOT exist on disk.
-    # The flutter-bujo-build skill covers CI workflows instead.
-    # Remove this entry once the skill is created or the router is cleaned up.
-    "flutter-ci-build": [
-        r"ci.*flutter", r"github.*actions.*flutter", r"flutter.*ci",
+    "flutter-bujo-build": [
+        r"flutter.*build", r"apk", r"aab", r"gradle",
+        r"android.*compil", r"build.*flutter", r"flutter.*ci",
+        r"ci.*flutter", r"github.*actions.*flutter",
     ],
     "flutter-native-android-bridge": [
         r"kotlin.*flutter", r"native.*android.*flutter",
@@ -327,6 +326,190 @@ TRIGGER_MAP: Dict[str, List[str]] = {
         r"fullstack.*rebuild", r"full.*stack.*paralel",
         r"subagent.*fullstack",
     ],
+
+    # --- Health ---
+    "health-aware-assistance": [
+        r"salud", r"presi[oó]n", r"cardiaca", r"diabetes",
+        r"medicaci[oó]n", r"s[ií]ntoma", r"doctor", r"m[eé]dico",
+        r"cl[ií]nica", r"enfermedad", r"dolor", r"fiebre",
+        r"health.*check", r"health.*monitor",
+    ],
+    "health-proactive-monitoring": [
+        r"monitoreo.*salud", r"watchdog.*salud", r"alerta.*m[eé]dica",
+        r"patr[oó]n.*salud", r"health.*pattern", r"correlaci[oó]n.*salud",
+    ],
+
+    # --- Finanzas ---
+    "watchdog-financiero-mapeo": [
+        r"finanza", r"banco", r"cuenta.*bancar", r"transferencia",
+        r"watchdog.*financiero", r"ingreso.*diario", r"gastos.*categor",
+        r"mapeo.*financiero",
+    ],
+    "personal-finance-tracking": [
+        r"presupuesto", r"ahorro", r"inversi[oó]n", r"gasto.*mensual",
+        r"finance.*track", r"budget", r"expense",
+    ],
+
+    # --- Creative ---
+    "ascii-art": [
+        r"ascii.*art", r"arte.*ascii", r"banner.*texto",
+        r"cowsay", r"figlet", r"pyfiglet",
+    ],
+    "ascii-video": [
+        r"ascii.*video", r"video.*ascii", r"video.*terminal",
+        r"gif.*ascii",
+    ],
+    "diagrams": [
+        r"diagrama", r"svg.*diagram", r"arquitectura.*svg",
+        r"flow.*chart", r"diagram.*svg",
+    ],
+    "humanizer": [
+        r"humaniz", r"menos.*rob[oó]tic", r"natural.*tone",
+        r"strip.*ai", r"desai",
+    ],
+    "baoyu-comic": [
+        r"historieta", r"comic.*educativ", r"knowledge.*comic",
+        r"baoyu.*comic", r"tira.*c[oó]mica",
+    ],
+    "baoyu-infographic": [
+        r"infograf[ií]a", r"informe.*visual", r"data.*visualiz",
+        r"baoyu.*info", r"visual.*report",
+    ],
+    "pixel-art": [
+        r"pixel.*art", r"8.?bit.*art", r"pixelado",
+        r"nes.*palette", r"game.*boy.*palette",
+    ],
+    "claude-design": [
+        r"landing.*page", r"prototipo.*web", r"design.*html",
+        r"ui.*mockup", r"artifact.*html",
+    ],
+    "manim-video": [
+        r"manim", r"animaci[oó]n.*mate", r"3blue1brown",
+        r"math.*animation", r"explicaci[oó]n.*visual.*mate",
+    ],
+    "popular-web-designs": [
+        r"stripe.*design", r"linear.*design", r"vercel.*design",
+        r"design.*system.*html", r"modern.*ui.*css",
+    ],
+
+    # --- Media ---
+    "music-and-audio": [
+        r"m[uú]sica", r"canci[oó]n", r"audio.*generar",
+        r"music.*gen", r"song.*lyrics", r"melod[ií]a",
+        r"letra.*canci[oó]n", r"acordes",
+    ],
+    "gif-search": [
+        r"\\bgif\\b", r"buscar.*gif", r"tenor", r"reaction.*gif",
+    ],
+    "spotify": [
+        r"spotify", r"playlist", r"reproduci", r"album.*música",
+        r"play.*music", r"current.*track",
+    ],
+
+    # --- Gaming ---
+    "warhammer-40k-miniature-identification": [
+        r"warhammer", r"miniatur.*id", r"40k.*unit",
+        r"secci[oó]n.*squad", r"data.*sheet",
+    ],
+    "warhammer-40k-identification": [
+        r"wh40k.*data.*sheet", r"armamento.*warhammer",
+        r"t'au.*unit", r"tau.*unidad", r"army.*list",
+    ],
+    "identificar-proxies-warhammer": [
+        r"proxy.*warhammer", r"stationforge", r"miniatura.*3d",
+        r"sustituto.*warhammer", r"3d.*proxy",
+    ],
+    "minecraft-modpack-server": [
+        r"minecraft", r"modpack", r"server.*mc",
+        r"curseforge", r"modrinth", r"fabric.*server",
+    ],
+    "pokemon-player": [
+        r"pok[eé]mon", r"emulador.*pokemon", r"headless.*pokemon",
+        r"gameboy.*pokemon",
+    ],
+
+    # --- Study ---
+    "book-summary-flashcards": [
+        r"resumen.*libro", r"flashcard", r"ficha.*estudio",
+        r"book.*summary", r"study.*card", r"repaso.*escolar",
+    ],
+
+    # --- MCP ---
+    "mcp-agent-bridge": [
+        r"mcp.*bridge", r"mcp.*agent", r"conectar.*mcp.*agente",
+    ],
+    "mcp-tool-research": [
+        r"mcp.*tool", r"investigar.*mcp", r"benchmark.*mcp",
+        r"mcp.*eval",
+    ],
+
+    # --- GitHub ---
+    "github": [
+        r"\\bgh\\b", r"github.*cli", r"git.*remote",
+        r"repo.*github", r"github.*api",
+    ],
+
+    # --- DevOps ---
+    "remote-linux-setup": [
+        r"ssh.*config", r"servidor.*remoto", r"linux.*setup",
+        r"remote.*machine", r"vps.*config",
+    ],
+    "webhook-subscriptions": [
+        r"webhook", r"callback.*url", r"event.*driven.*cron",
+        r"subscription.*webhook",
+    ],
+
+    # --- Productivity ---
+    "memoria-activa": [
+        r"memoria.*activa", r"active.*memory", r"fact.*extract",
+        r"conocimiento.*persistente",
+    ],
+    "3d-printing": [
+        r"impres[ióo]n.*3d", r"3d.*print", r"filamento",
+        r"stl.*file", r"boquilla.*0\\.4", r"capa.*0\\.12",
+        r"resina", r"cura", r"ad5x",
+    ],
+    "chile-ecommerce-research": [
+        r"precio.*chile", r"mercadolibre.*chile", r"sodimac",
+        r"paris.*cl", r"falabella", r"chile.*ecommerce",
+        r"comprar.*chile",
+    ],
+    "ocr-and-documents": [
+        r"ocr", r"extraer.*texto", r"pdf.*escaneado",
+        r"document.*scan", r"pymupdf", r"marker.*pdf",
+    ],
+    "multi-session-project-resumption": [
+        r"sesi[oó]n.*anterior", r"retomar", r"continuar.*proyecto",
+        r"multi.*session", r"resume.*project",
+    ],
+
+    # --- MLOps ---
+    "evaluating-llms-harness": [
+        r"eval.*llm", r"lm.*eval", r"mmlu", r"gsm8k",
+        r"benchmark.*modelo", r"lm.*harness",
+    ],
+    "obliteratus": [
+        r"abliterat", r"refusal.*llm", r"desbloquear.*modelo",
+    ],
+    "outlines": [
+        r"outlines.*json", r"structured.*output", r"pydantic.*llm",
+        r"regex.*llm", r"json.*schema.*llm",
+    ],
+    "serving-llms-vllm": [
+        r"vllm", r"servir.*modelo", r"llm.*serving",
+        r"openai.*api.*local",
+    ],
+    "dspy": [
+        r"dspy", r"declarative.*program", r"lm.*program",
+        r"optimizar.*prompt", r"rag.*pipeline",
+    ],
+    "axolotl": [
+        r"axolotl", r"fine.?tun.*llm", r"lora.*train",
+        r"qlora", r"entrenar.*modelo",
+    ],
+    "unsloth": [
+        r"unsloth", r"fine.?tun.*r[aá]pido", r"2x.*faster.*train",
+    ],
 }
 
 # Prioridades: skills que siempre revisar primero
@@ -336,6 +519,13 @@ HIGH_PRIORITY = [
     "hermes-agent",
     "hermes-enhanced-self",
     "hermes-enhanced-coding",
+    "health-aware-assistance",
+    "health-proactive-monitoring",
+    "watchdog-financiero-mapeo",
+    "personal-finance-tracking",
+    "crypto-trading",
+    "native-mcp",
+    "github",
 ]
 
 # Skills que requieren contexto adicional para no falsos positivos
@@ -526,10 +716,10 @@ def _load_sbert():
         return _SBERT_MODEL
     try:
         from sentence_transformers import SentenceTransformer
+        import logging as _sbert_log
+        _sbert_log.getLogger("sentence_transformers").setLevel(_sbert_log.WARNING)
         _SBERT_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"SBERT load failed (semantic fallback to regex): {e}")
+    except Exception:
         _SBERT_MODEL = False  # Sentinel: don't retry every call
     return _SBERT_MODEL if _SBERT_MODEL is not False else None
 
@@ -580,12 +770,16 @@ def _cosine_similarity(a, b):
 
 def semantic_classify(message: str, threshold: float = 0.25) -> List[Dict]:
     """Classify message using embedding similarity against skill descriptions."""
+    # Quick fail: skip if sbert is not available (avoids hanging on import)
+    model = _load_sbert()
+    if model is None:
+        return []
+
     if _SKILL_EMBEDDINGS is None:
         _build_embedding_cache()
     if not _SKILL_EMBEDDINGS:
         return []
-    
-    model = _load_sbert()
+
     msg_emb = model.encode([message], normalize_embeddings=True)[0]
     
     results = []
@@ -635,30 +829,24 @@ def auto_load_semantic(message: str, max_skills: int = 5) -> List[str]:
 
 
 if __name__ == "__main__":
-    # Override the main to use hybrid matching
     import sys
     if len(sys.argv) < 2:
         message = sys.stdin.read().strip()
     else:
         message = " ".join(sys.argv[1:])
-    
+
     if not message:
         print(json.dumps({"skills": [], "message": "No input provided"}))
         sys.exit(0)
-    
-    selected = auto_load_semantic(message)
+
+    # Fast path: regex-only (instantáneo, no depende de sbert)
     triggers = load_skill_triggers()
     regex_results = classify(message, triggers)
-    
-    try:
-        semantic_results = semantic_classify(message)
-    except Exception:
-        semantic_results = []
-    
+    selected = auto_load(message)
+
     output = {
         "skills": selected,
         "regex_matches": regex_results,
-        "semantic_matches": semantic_results,
         "total_matches": len(selected),
         "message_preview": message[:100],
     }
