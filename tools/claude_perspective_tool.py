@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.registry import registry, tool_error, tool_result
+from tools.perspective_quota import perspective_limits, reserve_perspective_call
 
 
 _CLAUDE_CANDIDATES = (
@@ -84,6 +85,13 @@ def _handle_claude_perspective(args: dict, **_kwargs) -> str:
             "Claude Code no está instalado o no tiene una sesión Claude.ai OAuth activa.",
             code="claude_oauth_unavailable",
         )
+    quota = reserve_perspective_call(_kwargs.get("session_id"), "claude")
+    if not quota["allowed"]:
+        return tool_error(
+            "Cuota de Claude alcanzada; usa otra perspectiva o continúa más tarde.",
+            code=quota["reason"],
+            usage={k: quota.get(k) for k in ("session_calls", "hour_calls", "limits")},
+        )
 
     prompt = str(args.get("prompt", "")).strip()
     if not prompt:
@@ -104,10 +112,11 @@ def _handle_claude_perspective(args: dict, **_kwargs) -> str:
             code="invalid_workdir",
         )
 
+    limits = perspective_limits()
     try:
-        max_turns = max(1, min(int(args.get("max_turns", 3)), 8))
+        max_turns = max(1, min(int(args.get("max_turns", limits["max_turns"])), int(limits["max_turns"])))
     except (TypeError, ValueError):
-        max_turns = 3
+        max_turns = int(limits["max_turns"])
 
     role_prompt = (
         "Eres una perspectiva independiente dentro del panel de Hermes. "
@@ -137,31 +146,46 @@ def _handle_claude_perspective(args: dict, **_kwargs) -> str:
         "--append-system-prompt",
         role_prompt,
     ]
-    try:
-        completed = subprocess.run(
-            cmd,
-            cwd=str(workdir_path),
-            capture_output=True,
-            text=True,
-            timeout=180,
-            env=_claude_env(),
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return tool_error("Claude agotó el límite de 180 segundos", code="timeout")
-    except OSError as exc:
-        return tool_error(f"No se pudo ejecutar Claude Code: {exc}", code="exec_error")
+    envelope = None
+    completed = None
+    attempts = 1 + int(limits["retry_empty"])
+    for attempt in range(attempts):
+        try:
+            completed = subprocess.run(
+                cmd,
+                cwd=str(workdir_path),
+                capture_output=True,
+                text=True,
+                timeout=180,
+                env=_claude_env(),
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return tool_error("Claude agotó el límite de 180 segundos", code="timeout")
+        except OSError as exc:
+            return tool_error(f"No se pudo ejecutar Claude Code: {exc}", code="exec_error")
+        envelope = _extract_json_line(completed.stdout)
+        if envelope and str(envelope.get("result", "")).strip():
+            break
+        if attempt + 1 < attempts:
+            cmd[2] = prompt + "\n\nSi tu respuesta anterior quedó vacía, devuelve ahora el análisis solicitado de forma breve y estructurada."
 
-    envelope = _extract_json_line(completed.stdout)
     if not envelope:
         return tool_error(
             "Claude Code no devolvió una respuesta JSON válida",
             code="invalid_claude_output",
-            exit_code=completed.returncode,
-            stderr=completed.stderr[-2_000:],
+            exit_code=completed.returncode if completed else None,
+            stderr=completed.stderr[-2_000:] if completed else "",
         )
 
+    assert completed is not None
     result = str(envelope.get("result", "")).strip()
+    if not result:
+        return tool_error(
+            "Claude Code devolvió una respuesta vacía después del reintento",
+            code="empty_claude_output",
+            exit_code=completed.returncode if completed else None,
+        )
     if len(result) > _MAX_RESULT_CHARS:
         result = result[:_MAX_RESULT_CHARS] + "\n[resultado truncado]"
     if envelope.get("is_error") or completed.returncode != 0:

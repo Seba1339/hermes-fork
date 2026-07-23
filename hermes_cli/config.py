@@ -2300,6 +2300,15 @@ DEFAULT_CONFIG = {
         "subagent_auto_approve": False,
     },
 
+    # Perspective panel quotas. Zero means unlimited for that dimension.
+    "perspectives": {
+        "enabled": True,
+        "max_calls_per_session": 6,
+        "max_calls_per_hour": 4,
+        "max_turns": 3,
+        "retry_empty": 1,
+    },
+
     # Ephemeral prefill messages file — JSON list of {role, content} dicts
     # injected at the start of every API call for few-shot priming.
     # Never saved to sessions, logs, or trajectories.
