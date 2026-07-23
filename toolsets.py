@@ -64,7 +64,7 @@ _HERMES_CORE_TOOLS = [
     # Code execution + delegation
     "execute_code", "delegate_task",
     # Multi-perspective review (service-gated; Claude OAuth when available)
-    "claude_perspective",
+    "claude_perspective", "perspective_router",
     # Cronjob management
     "cronjob",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
@@ -251,8 +251,8 @@ TOOLSETS = {
     },
 
     "perspectives": {
-        "description": "Independent model perspectives for critique, architecture and trade-off analysis",
-        "tools": ["claude_perspective"],
+        "description": "Independent model perspectives, deterministic routing and quota-aware review",
+        "tools": ["claude_perspective", "perspective_router"],
         "includes": []
     },
 
