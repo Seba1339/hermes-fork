@@ -104,6 +104,12 @@ def _handle_claude_perspective(args: dict, **_kwargs) -> str:
 
     role = str(args.get("role", "critical_reviewer")).strip() or "critical_reviewer"
     context = str(args.get("context", "")).strip()
+    model = str(args.get("model", "sonnet")).strip().lower() or "sonnet"
+    if model not in {"sonnet", "opus", "haiku", "fable"}:
+        return tool_error(
+            "model debe ser uno de: sonnet, opus, haiku o fable",
+            code="invalid_claude_model",
+        )
     workdir = str(args.get("workdir", os.getcwd())).strip() or os.getcwd()
     workdir_path = Path(workdir).expanduser()
     if not workdir_path.is_absolute() or not workdir_path.is_dir():
@@ -134,6 +140,8 @@ def _handle_claude_perspective(args: dict, **_kwargs) -> str:
         command,
         "-p",
         prompt,
+        "--model",
+        model,
         "--output-format",
         "json",
         "--no-session-persistence",
@@ -220,6 +228,12 @@ CLAUDE_PERSPECTIVE_SCHEMA = {
                 "type": "string",
                 "description": "Rol de Claude, por ejemplo critical_reviewer, architect o code_reviewer.",
                 "default": "critical_reviewer",
+            },
+            "model": {
+                "type": "string",
+                "enum": ["sonnet", "opus", "haiku", "fable"],
+                "description": "Modelo Claude Code. Sonnet es el predeterminado; usa opus para revisión crítica.",
+                "default": "sonnet",
             },
             "context": {"type": "string", "description": "Contexto adicional relevante, sin secretos."},
             "workdir": {"type": "string", "description": "Directorio absoluto del proyecto, si aplica."},
