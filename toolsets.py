@@ -63,6 +63,8 @@ _HERMES_CORE_TOOLS = [
     "clarify",
     # Code execution + delegation
     "execute_code", "delegate_task",
+    # Multi-perspective review (service-gated; Claude OAuth when available)
+    "claude_perspective",
     # Cronjob management
     "cronjob",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
@@ -248,6 +250,12 @@ TOOLSETS = {
         "includes": []
     },
 
+    "perspectives": {
+        "description": "Independent model perspectives for critique, architecture and trade-off analysis",
+        "tools": ["claude_perspective"],
+        "includes": []
+    },
+
     # "honcho" toolset removed — Honcho is now a memory provider plugin.
     # Tools are injected via MemoryManager, not the toolset system.
 
@@ -357,7 +365,7 @@ TOOLSETS = {
             "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
             "todo", "memory",
             "session_search", "clarify",
-            "execute_code", "delegate_task",
+            "execute_code", "delegate_task", "claude_perspective",
         ],
         "includes": [],
         # Posture toolset: selected per-session by agent/coding_context.py,
@@ -389,7 +397,7 @@ TOOLSETS = {
             "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
             "todo", "memory",
             "session_search",
-            "execute_code", "delegate_task",
+            "execute_code", "delegate_task", "claude_perspective",
         ],
         "includes": []
     },
@@ -417,7 +425,7 @@ TOOLSETS = {
             # Session history search
             "session_search",
             # Code execution + delegation
-            "execute_code", "delegate_task",
+            "execute_code", "delegate_task", "claude_perspective",
             # Cronjob management
             "cronjob",
             # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
