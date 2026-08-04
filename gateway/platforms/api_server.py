@@ -5110,9 +5110,12 @@ class APIServerAdapter(BasePlatformAdapter):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         """
-        Deliver cron output to the BuJo (bullet journal).
-        Cleans the output: removes [Cron] headers, error noise, job IDs.
-        Writes concise entries to the proper section.
+        Deliver an API-server message.
+
+        Cron output is intentionally not persisted to BuJo by default.
+        BuJo is for explicit human intent, not telemetry or scheduled-job
+        output. Callers that deliberately need a BuJo write must opt in with
+        metadata={"bujo_write": True}.
         
         Supports date override via metadata["date"] (YYYY-MM-DD).
         Supports section override via metadata["section"] (journal|reportes|agenda|estado|mas).
@@ -5123,6 +5126,9 @@ class APIServerAdapter(BasePlatformAdapter):
             import re
 
             meta = metadata or {}
+            if meta.get("bujo_write") is not True:
+                logger.info("[api_server] Skipping implicit BuJo capture for cron output")
+                return SendResult(success=True)
             job_name = meta.get("job_name", meta.get("name", "Cron"))
             target_date = meta.get("date", datetime.now().strftime("%Y-%m-%d"))
             section = meta.get("section", "reportes")
