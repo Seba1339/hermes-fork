@@ -182,3 +182,15 @@ automatic extraction (`memory_extract.py`), the `on_session_end()`/
 `on_pre_compress()` wiring, and the real `agent_memory.db` →
 `memory_store.db` migration script remain **not started** — see the Phase 3
 section above and `IMPLEMENTATION_LOG.md` for details.
+
+## Update — 2026-08-08 (3)
+
+Phase 3B-preparación (provenance + filter, still not the full auto-extraction
+rollout) has been implemented on
+`feature/personal-system-extraction-foundation`: `MemoryStore.add_fact` gained
+optional `session_id`/`fact_type`/`expires_at` keyword-only fields, and
+`HolographicMemoryProvider._auto_extract_facts` now stamps every extracted
+fact with `session_id`/`fact_type="extracted"` and skips messages whose
+content starts with `"[IMPORTANT:"`. `auto_extract` remains `false` by
+default; there is still no cron wiring and no real data has been migrated or
+extracted — see `IMPLEMENTATION_LOG.md` for verification steps and results.

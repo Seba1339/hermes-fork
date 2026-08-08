@@ -385,11 +385,18 @@ class HolographicMemoryProvider(MemoryProvider):
             content = msg.get("content", "")
             if not isinstance(content, str) or len(content) < 10:
                 continue
+            if content.startswith("[IMPORTANT:"):
+                continue
 
             for pattern in _PREF_PATTERNS:
                 if pattern.search(content):
                     try:
-                        self._store.add_fact(content[:400], category="user_pref")
+                        self._store.add_fact(
+                            content[:400],
+                            category="user_pref",
+                            session_id=self._session_id,
+                            fact_type="extracted",
+                        )
                         extracted += 1
                     except Exception:
                         pass
@@ -398,7 +405,12 @@ class HolographicMemoryProvider(MemoryProvider):
             for pattern in _DECISION_PATTERNS:
                 if pattern.search(content):
                     try:
-                        self._store.add_fact(content[:400], category="project")
+                        self._store.add_fact(
+                            content[:400],
+                            category="project",
+                            session_id=self._session_id,
+                            fact_type="extracted",
+                        )
                         extracted += 1
                     except Exception:
                         pass

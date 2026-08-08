@@ -84,6 +84,11 @@ _UNHELPFUL_DELTA = -0.10
 _TRUST_MIN       =  0.0
 _TRUST_MAX       =  1.0
 
+# Valid values for facts.fact_type — reject anything else rather than let a
+# typo silently create an unrecognised bucket that retrieval/lifecycle code
+# never accounts for.
+VALID_FACT_TYPES = frozenset({"explicit", "extracted", "correlated", "pattern"})
+
 # Entity extraction patterns
 _RE_CAPITALIZED  = re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b')
 _RE_DOUBLE_QUOTE = re.compile(r'"([^"]+)"')
@@ -201,13 +206,29 @@ class MemoryStore:
         content: str,
         category: str = "general",
         tags: str = "",
+        *,
+        session_id: "str | None" = None,
+        fact_type: str = "explicit",
+        expires_at: "str | None" = None,
     ) -> int:
         """Insert a fact and return its fact_id.
 
         Deduplicates by content (UNIQUE constraint). On duplicate, returns
         the existing fact_id without modifying the row. Extracts entities from
         the content and links them to the fact.
+
+        session_id/fact_type/expires_at are optional traceability fields
+        (Phase 3B-preparación). All three are keyword-only so every existing
+        positional/keyword call site (category=, tags=) is unaffected and
+        produces identical results to before. fact_type must be one of
+        VALID_FACT_TYPES ("explicit", "extracted", "correlated", "pattern");
+        anything else raises ValueError rather than silently storing an
+        unrecognised type.
         """
+        if fact_type not in VALID_FACT_TYPES:
+            raise ValueError(
+                f"fact_type must be one of {sorted(VALID_FACT_TYPES)}, got {fact_type!r}"
+            )
         with self._lock:
             content = content.strip()
             if not content:
@@ -216,10 +237,10 @@ class MemoryStore:
             try:
                 cur = self._conn.execute(
                     """
-                    INSERT INTO facts (content, category, tags, trust_score)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO facts (content, category, tags, trust_score, session_id, fact_type, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (content, category, tags, self.default_trust),
+                    (content, category, tags, self.default_trust, session_id, fact_type, expires_at),
                 )
                 self._conn.commit()
                 fact_id: int = cur.lastrowid  # type: ignore[assignment]

@@ -274,3 +274,34 @@ python3 -m py_compile plugins/memory/holographic/store.py tests/plugins/memory/t
 ### Push
 
 Pushed to `origin/feature/personal-system-memory-foundation`.
+
+---
+
+## Entry 4 — 2026-08-08 — Phase 3B-preparación: extraction provenance
+
+**Branch:** `feature/personal-system-extraction-foundation`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+`add_fact` conserva compatibilidad total y ahora guarda `session_id`,
+`fact_type` y `expires_at` cuando se proveen. El auto-extract marca los
+hechos capturados con `fact_type='extracted'`. Filtro inicial de
+extracción limitado al prefijo `[IMPORTANT:]`. `auto_extract` permanece
+en `false` por defecto — sin cron ni datos reales involucrados en este
+cambio.
+
+### Files changed
+
+- `plugins/memory/holographic/store.py`
+- `plugins/memory/holographic/__init__.py`
+- `docs/personal-system/ROADMAP.md`
+- `tests/plugins/memory/test_holographic_extraction_metadata.py` — new.
+
+### Commands executed and results
+
+- New test file — **9/9 passed**, 0 failed.
+
+### Push
+
+Pushed to `origin/feature/personal-system-extraction-foundation`.
