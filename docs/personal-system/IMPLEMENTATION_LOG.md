@@ -553,3 +553,55 @@ remains not started — see `ROADMAP.md`'s cross-cutting section.
 ### Push
 
 Pushed to `origin/feature/personal-system-memory-governance`.
+
+## Entry 11 — 2026-08-08 — Lector de auditoría de solo lectura
+
+**Branch:** `feature/personal-system-memory-audit-readonly`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+CLI de solo lectura `scripts/memory_audit.py` sobre la tabla
+`fact_governance_audit` que Entry 10 introdujo. `--db PATH` es obligatorio
+y nunca se infiere `HERMES_HOME`. La conexión se abre con los flags URI de
+SQLite `mode=ro&immutable=1`, de modo que cualquier escritura falla al
+nivel de SQLite (no solo por convención del código) y, como `MemoryStore`
+usa modo WAL, `immutable=1` evita además que este CLI abra o cree los
+archivos secundarios `-wal`/`-shm`. Soporta `--fact-id` (filtra a un solo
+`fact_id`) y `--limit` (por defecto 50, debe ser positivo), con filas
+ordenadas por `audit_id DESC`. Las rutas reales de Hermes quedan protegidas
+reutilizando el mismo guard `is_guarded_path` de `memory_migrate.py`
+(`~/.hermes`, `~/.hermes-enhanced`, o archivos llamados
+`agent_memory.db`/`memory_store.db`/`state.db`/`bujo.sqlite`) salvo
+`--allow-real-paths` — esa bandera solo levanta el chequeo de ruta, nunca
+hace escribible la conexión. Como `immutable=1` omite por completo el
+chequeo de WAL/locking, este CLI no verá filas que sigan sin checkpoint en
+un `-wal` pendiente: apuntar `--db` a un snapshot/backup estable, o
+ejecutar `PRAGMA wal_checkpoint(TRUNCATE);` contra la base de datos en vivo
+primero, si se necesitan las filas de auditoría más recientes.
+
+### Files changed
+
+- `scripts/memory_audit.py` — new.
+- `tests/scripts/test_memory_audit.py` — new.
+- `docs/personal-system/ROADMAP.md`
+- `docs/personal-system/IMPLEMENTATION_LOG.md`
+
+### Commands executed and results
+
+```bash
+bash scripts/run_tests.sh tests/scripts/test_memory_audit.py -q
+```
+
+- New test file — **24/24 passed**, 0 failed.
+
+### Rollback
+
+Additive-only change (new script + new test file). Rollback is reverting
+this commit, or deleting the `feature/personal-system-memory-audit-readonly`
+branch — no data migration or config change occurred, and no real database
+was read or touched.
+
+### Push
+
+Pushed to `origin/feature/personal-system-memory-audit-readonly`.

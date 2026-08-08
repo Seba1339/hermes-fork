@@ -279,3 +279,26 @@ remains `false` by default independent of that migration — the two are
 separate switches (one governs automatic extraction from live sessions;
 the other was a one-time, manually-invoked backfill of pre-existing
 legacy rows) and neither this note nor Update (8) changes that default.
+
+## Update — 2026-08-08 (10)
+
+Read-only audit reader for `fact_governance_audit` (Entry 10's governance
+table) implemented on `feature/personal-system-memory-audit-readonly`:
+`scripts/memory_audit.py`. `--db PATH` is required and is the only database
+this process ever opens — it is never inferred from `HERMES_HOME`. The
+connection is opened via SQLite's `mode=ro&immutable=1` URI flags, so writes
+are rejected at the SQLite level (not just by convention) and, because
+`MemoryStore` runs in WAL mode, `immutable=1` also means no `-wal`/`-shm`
+sidecar files are ever opened or created by this CLI. Supports `--fact-id`
+(filter to one fact) and `--limit` (default 50, must stay positive) over
+rows ordered `audit_id DESC`. Real Hermes paths are refused by the same
+`is_guarded_path` guard `memory_migrate.py` uses (`~/.hermes`,
+`~/.hermes-enhanced`, or files named `agent_memory.db`/`memory_store.db`/
+`state.db`/`bujo.sqlite`) unless `--allow-real-paths` — that flag only lifts
+the path check, it never makes the connection writable. Because
+`immutable=1` skips WAL/locking checks entirely, this CLI will not see rows
+still sitting in an un-checkpointed `-wal` file: point `--db` at a stable
+snapshot/backup, or run `PRAGMA wal_checkpoint(TRUNCATE);` against the live
+database first if the very latest audit rows are needed. Verified with
+**24/24** passing tests (`tests/scripts/test_memory_audit.py`); no real data
+was read or touched — see `IMPLEMENTATION_LOG.md` for details.
