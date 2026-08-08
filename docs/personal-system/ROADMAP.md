@@ -231,3 +231,20 @@ tests (`tests/agent/test_memory_skill_scaffolding.py`). This is a
 test-only verification pass: no production code, configuration, or
 cron wiring was changed, and no real data was migrated or extracted —
 see `IMPLEMENTATION_LOG.md` for details.
+
+## Update — 2026-08-08 (7)
+
+Phase 5A (offline migration tool) has been implemented on
+`feature/personal-system-memory-migration-tool`: `scripts/memory_migrate.py`
+migrates legacy `agent_memory` rows into a `MemoryStore`-compatible `facts`
+table, mapping `fact`->`content`, `category`->`category`,
+`confidence`->`trust_score`, `source`->`fact_type`, and `expires_at`
+verbatim. Dry-run is the default and writes nothing; `--apply` requires an
+explicit `--backup-dir`, and byte-for-byte timestamped backups of
+`--source`/`--target` are taken before any write, giving rollback by
+restoring those backups. Real Hermes paths (`~/.hermes`,
+`~/.hermes-enhanced`, or files named `agent_memory.db`, `memory_store.db`,
+`state.db`, `bujo.sqlite`) are refused unless `--allow-real-paths` (and,
+for `--apply`, `--confirm-real-migration`) is passed. Verified with
+**18/18** passing tests (`tests/scripts/test_memory_migrate.py`); no real
+data has been migrated — see `IMPLEMENTATION_LOG.md` for details.

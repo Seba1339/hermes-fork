@@ -410,3 +410,44 @@ system was touched.
 ### Push
 
 Pushed to `origin/feature/personal-system-prefetch-verification`.
+
+## Entry 8 — 2026-08-08 — Fase 5A: herramienta de migración offline
+
+**Branch:** `feature/personal-system-memory-migration-tool`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Herramienta offline `scripts/memory_migrate.py` para migrar filas de la
+tabla legacy `agent_memory` a la tabla `facts` compatible con
+`MemoryStore` (`fact`->`content`, `category`->`category`,
+`confidence`->`trust_score`, `source`->`fact_type`, `expires_at`
+verbatim; `session_id` siempre `NULL`). Dry-run es el comportamiento por
+defecto y no escribe nada; `--apply` exige `--backup-dir` y toma copias
+byte-a-byte con timestamp de `--source`/`--target` antes de escribir. Las
+rutas reales de Hermes (`~/.hermes`, `~/.hermes-enhanced`,
+`agent_memory.db`, `memory_store.db`, `state.db`, `bujo.sqlite`) quedan
+bloqueadas salvo `--allow-real-paths` (y `--confirm-real-migration` para
+`--apply`). Sin wiring de cron ni migración de datos reales.
+
+### Files changed
+
+- `scripts/memory_migrate.py` — new.
+- `tests/scripts/test_memory_migrate.py` — new.
+- `docs/personal-system/ROADMAP.md`
+- `docs/personal-system/IMPLEMENTATION_LOG.md`
+
+### Commands executed and results
+
+- `tests/scripts/test_memory_migrate.py` — **18/18 passed**, 0 failed.
+
+### Rollback
+
+Restaurar backups tomados por `--apply` (timestamped, byte-for-byte de
+`--source`/`--target`) o eliminar la rama
+`feature/personal-system-memory-migration-tool`; ningún otro sistema fue
+tocado, y no se ejecutó migración contra datos reales.
+
+### Push
+
+Pushed to `origin/feature/personal-system-memory-migration-tool`.
