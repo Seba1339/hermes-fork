@@ -142,3 +142,12 @@ Phases 3-4 producing data worth managing.
 - Restarting or reloading any live service. Every phase above that
   requires a restart to verify says so explicitly and defers it to the
   user.
+
+## Update — 2026-08-08
+
+Phase 2 item 4 (BuJo cron-output cleaning logic extraction) has been
+implemented on `feature/personal-system-phase2`: the inline logic in
+`APIServerAdapter.send()` (`gateway/platforms/api_server.py`) is now the
+pure function `_clean_cron_output`, covered by
+`tests/gateway/test_api_server_bujo_delivery.py`. No semantic change — see
+`IMPLEMENTATION_LOG.md` for verification steps and results.

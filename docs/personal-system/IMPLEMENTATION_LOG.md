@@ -195,3 +195,34 @@ Pushed to `origin/feature/personal-system-foundation` (see push output in
 the surrounding conversation for the exact result — recorded there rather
 than duplicated here to avoid this log going stale if the push is retried).
 No PR opened, no merge to `main`, per the task brief.
+
+---
+
+## Entry 2 — 2026-08-08 — Phase 2 item 4: BuJo cron-output cleaning extraction
+
+**Branch:** `feature/personal-system-phase2`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Authorized scope: extract the inline noise-stripping/truncation logic in
+`APIServerAdapter.send()` (`gateway/platforms/api_server.py`) into a pure
+function (`_clean_cron_output`), plus its unit tests
+(`tests/gateway/test_api_server_bujo_delivery.py`). Pure refactor, no
+behavior change, per `ROADMAP.md` Phase 2 item 4.
+
+### Commands executed and results
+
+```bash
+git diff --check
+bash scripts/run_tests.sh tests/gateway/test_api_server_bujo_delivery.py -q
+python3 -m py_compile gateway/platforms/api_server.py tests/gateway/test_api_server_bujo_delivery.py
+```
+
+- `git diff --check` — clean, no whitespace errors.
+- Test suite — **19/19 passed**, 0 failed.
+- `py_compile` — both files compile cleanly.
+
+### Push
+
+Pushed to `origin/feature/personal-system-phase2`.
