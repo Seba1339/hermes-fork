@@ -248,3 +248,14 @@ restoring those backups. Real Hermes paths (`~/.hermes`,
 for `--apply`, `--confirm-real-migration`) is passed. Verified with
 **18/18** passing tests (`tests/scripts/test_memory_migrate.py`); no real
 data has been migrated — see `IMPLEMENTATION_LOG.md` for details.
+
+## Update — 2026-08-08 (8)
+
+Phase 5A's tool was tested offline first (18/18 passing tests, no real
+data touched — see Update 7 above) and was then applied exactly once
+against real Hermes paths with `--allow-real-paths
+--confirm-real-migration`, per its explicit real-path guard. `state.db`
+and `bujo.sqlite` were not touched by this run — the tool only reads
+`agent_memory.db` and writes `memory_store.db`. Backups were taken before
+any write; see `IMPLEMENTATION_LOG.md` Entry 9 for the backup path, row
+counts, and post-migration dry-run verification.

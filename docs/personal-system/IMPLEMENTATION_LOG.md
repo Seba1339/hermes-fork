@@ -451,3 +451,38 @@ tocado, y no se ejecutó migración contra datos reales.
 ### Push
 
 Pushed to `origin/feature/personal-system-memory-migration-tool`.
+
+## Entry 9 — 2026-08-08 — Fase 5A: migración real ejecutada (una vez)
+
+**Branch:** `feature/personal-system-memory-migration-tool`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Ejecución real, única, de `scripts/memory_migrate.py --apply` contra las
+rutas reales de Hermes, tras la verificación offline de la Entry 8
+(18/18 tests). Requirió `--allow-real-paths --confirm-real-migration`
+explícitos, ya que las rutas reales están bloqueadas por defecto.
+`state.db` y `bujo.sqlite` no fueron tocadas por esta herramienta — solo
+lee/escribe `agent_memory.db` (origen) y `memory_store.db` (destino).
+
+### Backup
+
+`/home/ubuntu/hermes-backups/memory-migration-20260808T191738Z` — copias
+byte-a-byte con timestamp de `--source` y `--target`, tomadas antes de
+cualquier escritura, tal como hace `--apply` por diseño.
+
+### Resultado
+
+- **18/18 filas** de `agent_memory` insertadas en `facts` (destino).
+- **`agent_memory`, `state.db` y `bujo.sqlite` intactas**, verificado por
+  hash contra el backup.
+- Destino (`memory_store.db`) contiene **18 facts** tras la migración.
+- Dry-run posterior contra el mismo origen/destino: **18 duplicadas / 0
+  insertables** — confirma que la migración fue completa y que el
+  dedup de la herramienta evita reinserciones si se vuelve a ejecutar.
+
+### Rollback
+
+Restaurar `agent_memory.db` y `memory_store.db` desde
+`/home/ubuntu/hermes-backups/memory-migration-20260808T191738Z`.
