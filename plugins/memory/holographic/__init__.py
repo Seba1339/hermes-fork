@@ -32,6 +32,22 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Auto-extraction detection patterns (shared by preview_extracted_facts and
+# _auto_extract_facts — see HolographicMemoryProvider below)
+# ---------------------------------------------------------------------------
+
+_PREF_PATTERNS = [
+    re.compile(r'\bI\s+(?:prefer|like|love|use|want|need)\s+(.+)', re.IGNORECASE),
+    re.compile(r'\bmy\s+(?:favorite|preferred|default)\s+\w+\s+is\s+(.+)', re.IGNORECASE),
+    re.compile(r'\bI\s+(?:always|never|usually)\s+(.+)', re.IGNORECASE),
+]
+_DECISION_PATTERNS = [
+    re.compile(r'\bwe\s+(?:decided|agreed|chose)\s+(?:to\s+)?(.+)', re.IGNORECASE),
+    re.compile(r'\bthe\s+project\s+(?:uses|needs|requires)\s+(.+)', re.IGNORECASE),
+]
+
+
+# ---------------------------------------------------------------------------
 # Tool schemas (unchanged from original PR)
 # ---------------------------------------------------------------------------
 
@@ -119,6 +135,7 @@ class HolographicMemoryProvider(MemoryProvider):
         self._config = config or _load_plugin_config()
         self._store = None
         self._retriever = None
+        self._session_id: "str | None" = None
         self._min_trust = float(self._config.get("min_trust_threshold", 0.3))
 
     @property
@@ -367,18 +384,21 @@ class HolographicMemoryProvider(MemoryProvider):
 
     # -- Auto-extraction (on_session_end) ------------------------------------
 
-    def _auto_extract_facts(self, messages: list) -> None:
-        _PREF_PATTERNS = [
-            re.compile(r'\bI\s+(?:prefer|like|love|use|want|need)\s+(.+)', re.IGNORECASE),
-            re.compile(r'\bmy\s+(?:favorite|preferred|default)\s+\w+\s+is\s+(.+)', re.IGNORECASE),
-            re.compile(r'\bI\s+(?:always|never|usually)\s+(.+)', re.IGNORECASE),
-        ]
-        _DECISION_PATTERNS = [
-            re.compile(r'\bwe\s+(?:decided|agreed|chose)\s+(?:to\s+)?(.+)', re.IGNORECASE),
-            re.compile(r'\bthe\s+project\s+(?:uses|needs|requires)\s+(.+)', re.IGNORECASE),
-        ]
+    def preview_extracted_facts(self, messages: list) -> List[Dict[str, Any]]:
+        """Detect candidate facts in `messages` without storing anything.
 
-        extracted = 0
+        Pure function of (self._session_id, messages): no SQLite access, no
+        calls to `add_fact`, no other side effects. Applies the same rules
+        `_auto_extract_facts` persists — `role == "user"` only, skip content
+        starting with `"[IMPORTANT:"`, preference/decision regex detection —
+        so a caller can inspect what auto-extraction *would* store before
+        `auto_extract` is ever turned on.
+
+        Returns a list of dicts, each with the same keys `_auto_extract_facts`
+        passes to `add_fact`: `content`, `category`, `fact_type="extracted"`,
+        `session_id`.
+        """
+        candidates: List[Dict[str, Any]] = []
         for msg in messages:
             if msg.get("role") != "user":
                 continue
@@ -390,31 +410,39 @@ class HolographicMemoryProvider(MemoryProvider):
 
             for pattern in _PREF_PATTERNS:
                 if pattern.search(content):
-                    try:
-                        self._store.add_fact(
-                            content[:400],
-                            category="user_pref",
-                            session_id=self._session_id,
-                            fact_type="extracted",
-                        )
-                        extracted += 1
-                    except Exception:
-                        pass
+                    candidates.append({
+                        "content": content[:400],
+                        "category": "user_pref",
+                        "fact_type": "extracted",
+                        "session_id": self._session_id,
+                    })
                     break
 
             for pattern in _DECISION_PATTERNS:
                 if pattern.search(content):
-                    try:
-                        self._store.add_fact(
-                            content[:400],
-                            category="project",
-                            session_id=self._session_id,
-                            fact_type="extracted",
-                        )
-                        extracted += 1
-                    except Exception:
-                        pass
+                    candidates.append({
+                        "content": content[:400],
+                        "category": "project",
+                        "fact_type": "extracted",
+                        "session_id": self._session_id,
+                    })
                     break
+
+        return candidates
+
+    def _auto_extract_facts(self, messages: list) -> None:
+        extracted = 0
+        for candidate in self.preview_extracted_facts(messages):
+            try:
+                self._store.add_fact(
+                    candidate["content"],
+                    category=candidate["category"],
+                    session_id=candidate["session_id"],
+                    fact_type=candidate["fact_type"],
+                )
+                extracted += 1
+            except Exception:
+                pass
 
         if extracted:
             logger.info("Auto-extracted %d facts from conversation", extracted)

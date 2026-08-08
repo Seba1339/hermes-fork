@@ -305,3 +305,30 @@ cambio.
 ### Push
 
 Pushed to `origin/feature/personal-system-extraction-foundation`.
+
+## Entry 5 — 2026-08-08 — Phase 3C: extraction dry-run preview
+
+**Branch:** `feature/personal-system-extraction-dry-run`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+`HolographicMemoryProvider` gana `preview_extracted_facts()`, que reutiliza
+las mismas reglas de detección de `_auto_extract_facts` para devolver los
+hechos candidatos que una sesión produciría, sin tocar SQLite ni llamar a
+`add_fact`. `auto_extract` permanece en `false` por defecto — sin cron ni
+datos reales involucrados en este cambio.
+
+### Files changed
+
+- `plugins/memory/holographic/__init__.py`
+- `docs/personal-system/ROADMAP.md`
+- `tests/plugins/memory/test_holographic_extraction_dry_run.py` — new.
+
+### Commands executed and results
+
+- New test file — **12/12 passed**, 0 failed.
+
+### Push
+
+Pushed to `origin/feature/personal-system-extraction-dry-run`.

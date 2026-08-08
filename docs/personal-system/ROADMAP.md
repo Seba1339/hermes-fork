@@ -194,3 +194,14 @@ fact with `session_id`/`fact_type="extracted"` and skips messages whose
 content starts with `"[IMPORTANT:"`. `auto_extract` remains `false` by
 default; there is still no cron wiring and no real data has been migrated or
 extracted — see `IMPLEMENTATION_LOG.md` for verification steps and results.
+
+## Update — 2026-08-08 (4)
+
+Phase 3C (extraction dry-run preview) has been implemented on
+`feature/personal-system-extraction-dry-run`: `HolographicMemoryProvider`
+gained `preview_extracted_facts()`, a pure function that reuses
+`_auto_extract_facts`'s detection rules to return the list of candidate
+facts a session *would* produce — no SQLite access, no `add_fact` calls, no
+side effects. `auto_extract` remains `false` by default; there is still no
+cron wiring and no real data has been migrated or extracted — see
+`IMPLEMENTATION_LOG.md` for verification steps and results.
