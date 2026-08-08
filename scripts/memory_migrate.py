@@ -187,7 +187,7 @@ def _transform_row(row: sqlite3.Row) -> "tuple[Optional[TransformedFact], Option
 
     return (
         TransformedFact(
-            rowid=row["rowid"],
+            rowid=row["_source_rowid"],
             content=content,
             category=category,
             trust_score=trust_score,
@@ -209,7 +209,7 @@ def _read_source_rows(conn: sqlite3.Connection) -> "list[sqlite3.Row]":
     if "fact" not in columns:
         raise MigrationError(f"'{_SOURCE_TABLE}' table has no 'fact' column")
 
-    select_cols = ["rowid", "fact"]
+    select_cols = ["rowid AS _source_rowid", "fact"]
     for col in _SOURCE_OPTIONAL_COLUMNS:
         select_cols.append(col if col in columns else f"NULL AS {col}")
 
@@ -256,7 +256,7 @@ def build_plan(source: Path, target: Path) -> MigrationPlan:
     for row in rows:
         fact, error = _transform_row(row)
         if error is not None:
-            plan.invalid.append({"rowid": row["rowid"], "reason": error})
+            plan.invalid.append({"rowid": row["_source_rowid"], "reason": error})
             continue
         if fact.content in seen:
             plan.duplicate_rowids.append(fact.rowid)
