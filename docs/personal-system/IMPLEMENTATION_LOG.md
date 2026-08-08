@@ -605,3 +605,57 @@ was read or touched.
 ### Push
 
 Pushed to `origin/feature/personal-system-memory-audit-readonly`.
+
+## Entry 12 — 2026-08-08 — CLI de gobernanza (mutaciones auditadas)
+
+**Branch:** `feature/personal-system-memory-governance-cli`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+CLI `scripts/memory_governance.py`, contraparte de escritura del lector
+de solo lectura de Entry 11, sobre `MemoryStore.update_fact_audited`/
+`forget_fact_audited`. Soporta `--action update` (cambia
+`content`/`category`/`trust_score`) y `--action forget` (borra el fact),
+ambas sobre un `--fact-id` único. Preview (dry-run) es el comportamiento
+por defecto y permanece inmutable: nunca importa ni construye
+`MemoryStore`, nunca resuelve `HERMES_HOME` y nunca toma backup — solo
+abre `--db` en modo lectura (`mode=ro&immutable=1`, igual que
+`memory_audit.py`) para imprimir un diff JSON de lo que haría `--apply`.
+`--reason` es obligatorio en ambas acciones y queda registrado en
+`fact_governance_audit`; `--action forget` exige además
+`--confirm-forget`. `--apply` requiere un `--backup-dir` explícito y toma
+una copia byte-a-byte y timestamped de `--db` antes de cualquier
+escritura — si el backup falla, no se escribe nada. Las rutas reales de
+Hermes quedan protegidas por el mismo guard `is_guarded_path` que usan
+`memory_migrate.py`/`memory_audit.py` (`~/.hermes`, `~/.hermes-enhanced`,
+o archivos llamados `agent_memory.db`/`memory_store.db`/`state.db`/
+`bujo.sqlite`) salvo `--allow-real-paths`, y `--apply` contra una ruta así
+exige además `--confirm-real-governance`.
+
+### Files changed
+
+- `scripts/memory_governance.py` — new.
+- `tests/scripts/test_memory_governance.py` — new.
+- `docs/personal-system/ROADMAP.md`
+- `docs/personal-system/IMPLEMENTATION_LOG.md`
+
+### Commands executed and results
+
+```bash
+bash scripts/run_tests.sh tests/scripts/test_memory_governance.py -q
+```
+
+- New test file — **36/36 passed**, 0 failed. Suites de auditoría y
+  gobernanza combinadas: **81/81 passed**.
+
+### Rollback
+
+Additive-only change (new script + new test file). Rollback is reverting
+this commit, or deleting the `feature/personal-system-memory-governance-cli`
+branch — no data migration or config change occurred, and no real database
+was touched.
+
+### Push
+
+Pushed to `origin/feature/personal-system-memory-governance-cli`.

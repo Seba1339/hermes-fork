@@ -302,3 +302,26 @@ snapshot/backup, or run `PRAGMA wal_checkpoint(TRUNCATE);` against the live
 database first if the very latest audit rows are needed. Verified with
 **24/24** passing tests (`tests/scripts/test_memory_audit.py`); no real data
 was read or touched — see `IMPLEMENTATION_LOG.md` for details.
+
+## Update — 2026-08-08 (11)
+
+Governance *write* CLI `scripts/memory_governance.py`, companion to
+Update (10)'s read-only `memory_audit.py`, wraps
+`MemoryStore.update_fact_audited`/`forget_fact_audited` for `--action
+update`/`--action forget` against a single `--fact-id`. Preview (dry-run)
+is the default and stays immutable: it never imports or constructs
+`MemoryStore`, never resolves `HERMES_HOME`, and never takes a backup — it
+only opens `--db` read-only (`mode=ro&immutable=1`) to print a JSON diff
+of what `--apply` would do. `--reason` is mandatory for both actions and
+is recorded in `fact_governance_audit`; `--action forget` additionally
+requires `--confirm-forget`. `--apply` requires an explicit `--backup-dir`
+and takes a byte-for-byte, timestamped backup of `--db` before any write —
+if the backup fails, nothing is written. The same `is_guarded_path` guard
+`memory_migrate.py`/`memory_audit.py` use refuses real Hermes paths
+(`~/.hermes`, `~/.hermes-enhanced`, or files named `agent_memory.db`,
+`memory_store.db`, `state.db`, `bujo.sqlite`) unless `--allow-real-paths`,
+and `--apply` against such a path additionally requires
+`--confirm-real-governance`. Verified with **36/36** passing tests
+(`tests/scripts/test_memory_governance.py`; 81/81 across the audit and
+governance suites combined); no real data has been touched — see
+`IMPLEMENTATION_LOG.md` for details.
