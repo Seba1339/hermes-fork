@@ -85,6 +85,25 @@ is the only piece that touches this repo. Before touching `store.py`:
   directly — per the proposal's own "Riesgos y Mitigaciones" table
   ("Backup de las 3 DBs antes de migrar. Script de rollback").
 
+**Phase 3A (schema preparation) — done on
+`feature/personal-system-memory-foundation`.** The `session_id`, `fact_type`
+(default `"explicit"`), and `expires_at` columns now exist on `facts`, added
+via the same additive PRAGMA-detect / `ALTER TABLE ... ADD COLUMN` pattern
+already used for `hrr_vector` — nullable, backward-compatible, no change to
+`add_fact`/`search_facts`/`list_facts`/`update_fact`/`remove_fact` semantics
+or dedup behavior, and the new columns are not yet exposed in any returned
+dict. Covered by
+`tests/plugins/memory/test_holographic_schema_migration.py`. See
+`IMPLEMENTATION_LOG.md` for the exact diff and verification steps.
+
+**Still not started (Phase 3B+):** `memory_extract.py`, the
+`on_session_end()`/`on_pre_compress()` wiring, the real
+`agent_memory.db` → `memory_store.db` migration script and its backup/
+rollback procedure, and actually populating the new columns on write. None
+of this is authorized by the work above — it needs its own explicit
+go-ahead per this roadmap's framing, since it touches files and live data
+outside this repo.
+
 ## Phase 4 — Proactive retrieval (Fase 2, P1)
 
 `prefetch()` in `plugins/memory/holographic/__init__.py`, per the
@@ -151,3 +170,15 @@ implemented on `feature/personal-system-phase2`: the inline logic in
 pure function `_clean_cron_output`, covered by
 `tests/gateway/test_api_server_bujo_delivery.py`. No semantic change — see
 `IMPLEMENTATION_LOG.md` for verification steps and results.
+
+## Update — 2026-08-08 (2)
+
+Phase 3A (schema preparation only) has been implemented on
+`feature/personal-system-memory-foundation`: the `session_id`, `fact_type`,
+and `expires_at` columns were added to `plugins/memory/holographic/store.py`'s
+`facts` table via an additive migration, covered by
+`tests/plugins/memory/test_holographic_schema_migration.py`. Fase 1's
+automatic extraction (`memory_extract.py`), the `on_session_end()`/
+`on_pre_compress()` wiring, and the real `agent_memory.db` →
+`memory_store.db` migration script remain **not started** — see the Phase 3
+section above and `IMPLEMENTATION_LOG.md` for details.

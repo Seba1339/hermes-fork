@@ -226,3 +226,51 @@ python3 -m py_compile gateway/platforms/api_server.py tests/gateway/test_api_ser
 ### Push
 
 Pushed to `origin/feature/personal-system-phase2`.
+
+---
+
+## Entry 3 — 2026-08-08 — Phase 3A: memory schema traceability fields
+
+**Branch:** `feature/personal-system-memory-foundation`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Authorized scope: schema preparation only. Add `session_id` (TEXT),
+`fact_type` (TEXT, default `'explicit'`), and `expires_at` (TIMESTAMP)
+columns to the `facts` table in `plugins/memory/holographic/store.py`,
+following the same additive PRAGMA-detect / `ALTER TABLE ... ADD COLUMN`
+pattern already used for `hrr_vector`. Nullable/additive, no change to
+`add_fact`/`search_facts`/`list_facts`/`update_fact`/`remove_fact`
+semantics or dedup behavior; new columns are not yet populated or exposed
+in any returned dict. Mechanical finalization of work already staged on
+this branch — see `ROADMAP.md` Phase 3A for the full rationale and what
+remains out of scope (Phase 3B+).
+
+### Files changed
+
+- `plugins/memory/holographic/store.py` — schema + migration.
+- `tests/plugins/memory/test_holographic_schema_migration.py` — new, 11
+  tests covering fresh-DB creation and migration of a pre-existing DB
+  (with the `hrr_vector`-only schema) up to the new columns.
+- `docs/personal-system/ROADMAP.md` — Phase 3A marked done, Phase 3B+
+  scope reaffirmed as not started.
+
+### Commands executed and results
+
+```bash
+git diff --check
+bash scripts/run_tests.sh tests/plugins/memory/test_holographic_schema_migration.py -q
+bash scripts/run_tests.sh tests/plugins/memory/ -q
+python3 -m py_compile plugins/memory/holographic/store.py tests/plugins/memory/test_holographic_schema_migration.py
+```
+
+- `git diff --check` — clean, no whitespace errors.
+- New test file — **11/11 passed**, 0 failed.
+- Full `tests/plugins/memory/` suite — **471/471 passed**, 0 failed. No
+  regression.
+- `py_compile` — both files compile cleanly.
+
+### Push
+
+Pushed to `origin/feature/personal-system-memory-foundation`.

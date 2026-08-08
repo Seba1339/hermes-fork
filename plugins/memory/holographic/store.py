@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS facts (
     helpful_count   INTEGER DEFAULT 0,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    hrr_vector      BLOB
+    hrr_vector      BLOB,
+    session_id      TEXT,
+    fact_type       TEXT DEFAULT 'explicit',
+    expires_at      TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS entities (
@@ -175,10 +178,18 @@ class MemoryStore:
         from hermes_state import apply_wal_with_fallback
         apply_wal_with_fallback(self._conn, db_label="memory_store.db (holographic)")
         self._conn.executescript(_SCHEMA)
-        # Migrate: add hrr_vector column if missing (safe for existing databases)
+        # Migrate: add columns introduced after the initial release if missing
+        # (safe, additive, backward-compatible for existing databases — never
+        # drops or renames a column, never touches existing rows' data).
         columns = {row[1] for row in self._conn.execute("PRAGMA table_info(facts)").fetchall()}
         if "hrr_vector" not in columns:
             self._conn.execute("ALTER TABLE facts ADD COLUMN hrr_vector BLOB")
+        if "session_id" not in columns:
+            self._conn.execute("ALTER TABLE facts ADD COLUMN session_id TEXT")
+        if "fact_type" not in columns:
+            self._conn.execute("ALTER TABLE facts ADD COLUMN fact_type TEXT DEFAULT 'explicit'")
+        if "expires_at" not in columns:
+            self._conn.execute("ALTER TABLE facts ADD COLUMN expires_at TIMESTAMP")
         self._conn.commit()
 
     # ------------------------------------------------------------------
