@@ -76,6 +76,31 @@ CREATE TABLE IF NOT EXISTS memory_banks (
     fact_count INTEGER DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Governance audit trail for update_fact_audited/forget_fact_audited (see
+-- below). Purely additive and idempotent (CREATE TABLE/INDEX IF NOT
+-- EXISTS), like memory_banks above — a whole new table needs no
+-- PRAGMA-detect/ALTER-TABLE dance, unlike columns added to an existing
+-- table. Never stores secrets or conversation transcripts: only the
+-- fact's own before/after content, category, trust_score, plus the
+-- caller-supplied reason and optional session_id.
+CREATE TABLE IF NOT EXISTS fact_governance_audit (
+    audit_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    fact_id      INTEGER NOT NULL,
+    action       TEXT NOT NULL,
+    old_content  TEXT,
+    new_content  TEXT,
+    old_category TEXT,
+    new_category TEXT,
+    old_trust    REAL,
+    new_trust    REAL,
+    reason       TEXT NOT NULL,
+    session_id   TEXT,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_fact_governance_audit_fact_id
+    ON fact_governance_audit(fact_id);
 """
 
 # Trust adjustment constants
@@ -470,6 +495,235 @@ class MemoryStore:
                 "old_trust":    old_trust,
                 "new_trust":    new_trust,
                 "helpful_count": row["helpful_count"] + helpful_increment,
+            }
+
+    # ------------------------------------------------------------------
+    # Governance: audited update/forget
+    # ------------------------------------------------------------------
+    #
+    # A stricter, separate API from update_fact/remove_fact above: every
+    # call is explicit-by-id, requires a human-readable `reason`, and the
+    # mutation plus its audit row are written in one explicit SQLite
+    # transaction (BEGIN IMMEDIATE / COMMIT / ROLLBACK — the shared
+    # connection otherwise runs isolation_level=None/autocommit, see the
+    # class docstring above), so a failed audit write rolls back the
+    # mutation and vice versa. Neither method ever INSERTs into `facts`
+    # (update_fact_audited only UPDATEs an existing row, forget_fact_audited
+    # only DELETEs one), so they cannot create facts and cannot bypass the
+    # `content` UNIQUE dedup invariant — an update that would collide with
+    # another fact's content is rejected, not silently merged.
+
+    def update_fact_audited(
+        self,
+        fact_id: int,
+        *,
+        reason: str,
+        content: "str | None" = None,
+        category: "str | None" = None,
+        trust_score: "float | None" = None,
+        session_id: "str | None" = None,
+    ) -> dict:
+        """Explicitly update one existing fact by id, with a mandatory audit trail.
+
+        Unlike `update_fact` (algorithmic `trust_delta`, no reason required),
+        this is the governance path: `reason` is mandatory, every field is
+        validated before anything is written, and the before/after values
+        are recorded in `fact_governance_audit` in the same transaction as
+        the `facts` row update.
+
+        If every provided field already equals the fact's current value (or
+        no fields are provided at all), this is an explicit no-op: the
+        `facts` row is not touched (no `updated_at` bump, no entity/HRR/bank
+        recompute) but the attempt is still audited (old == new in the audit
+        row) so the reasoning is not lost. Returns a dict with `noop: True`
+        in that case.
+
+        Raises:
+            ValueError: missing/blank `reason`, empty `content`, an
+                out-of-range `trust_score`, or `content` that collides with
+                another fact (dedup invariant).
+            KeyError: `fact_id` does not exist.
+        """
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValueError("reason is required")
+        if content is not None:
+            content = content.strip()
+            if not content:
+                raise ValueError("content must not be empty")
+        if trust_score is not None:
+            trust_score = float(trust_score)
+            if not (_TRUST_MIN <= trust_score <= _TRUST_MAX):
+                raise ValueError(
+                    f"trust_score must be between {_TRUST_MIN} and {_TRUST_MAX}, "
+                    f"got {trust_score!r}"
+                )
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT content, category, trust_score FROM facts WHERE fact_id = ?",
+                (fact_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"fact_id {fact_id} not found")
+
+            old_content, old_category, old_trust = (
+                row["content"], row["category"], row["trust_score"]
+            )
+
+            changed: "dict[str, tuple]" = {}
+            if content is not None and content != old_content:
+                changed["content"] = (old_content, content)
+            if category is not None and category != old_category:
+                changed["category"] = (old_category, category)
+            if trust_score is not None and trust_score != old_trust:
+                changed["trust_score"] = (old_trust, trust_score)
+            noop = not changed
+
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                if not noop:
+                    assignments = ["updated_at = CURRENT_TIMESTAMP"]
+                    params: list = []
+                    if "content" in changed:
+                        assignments.append("content = ?")
+                        params.append(content)
+                    if "category" in changed:
+                        assignments.append("category = ?")
+                        params.append(category)
+                    if "trust_score" in changed:
+                        assignments.append("trust_score = ?")
+                        params.append(trust_score)
+                    params.append(fact_id)
+                    try:
+                        self._conn.execute(
+                            f"UPDATE facts SET {', '.join(assignments)} WHERE fact_id = ?",
+                            params,
+                        )
+                    except sqlite3.IntegrityError as exc:
+                        raise ValueError(
+                            f"content already exists on another fact: {content!r}"
+                        ) from exc
+
+                self._conn.execute(
+                    """
+                    INSERT INTO fact_governance_audit
+                        (fact_id, action, old_content, new_content,
+                         old_category, new_category, old_trust, new_trust,
+                         reason, session_id)
+                    VALUES (?, 'update', ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        fact_id,
+                        changed["content"][0] if "content" in changed else None,
+                        changed["content"][1] if "content" in changed else None,
+                        changed["category"][0] if "category" in changed else None,
+                        changed["category"][1] if "category" in changed else None,
+                        changed["trust_score"][0] if "trust_score" in changed else None,
+                        changed["trust_score"][1] if "trust_score" in changed else None,
+                        reason,
+                        session_id,
+                    ),
+                )
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+            else:
+                self._conn.execute("COMMIT")
+
+            # Ancillary re-indexing (entities/HRR/bank) — best-effort side
+            # effects, same as update_fact above: not part of the atomic
+            # facts-row + audit-row guarantee, which already committed.
+            if "content" in changed:
+                self._conn.execute(
+                    "DELETE FROM fact_entities WHERE fact_id = ?", (fact_id,)
+                )
+                self._conn.commit()
+                for name in self._extract_entities(content):
+                    entity_id = self._resolve_entity(name)
+                    self._link_fact_entity(fact_id, entity_id)
+                self._compute_hrr_vector(fact_id, content)
+            if not noop:
+                self._rebuild_bank(old_category)
+                if "category" in changed:
+                    self._rebuild_bank(category)
+
+            return {
+                "fact_id": fact_id,
+                "action": "update",
+                "noop": noop,
+                "changed_fields": sorted(changed),
+                "old": {k: v[0] for k, v in changed.items()},
+                "new": {k: v[1] for k, v in changed.items()},
+            }
+
+    def forget_fact_audited(
+        self,
+        fact_id: int,
+        *,
+        reason: str,
+        session_id: "str | None" = None,
+    ) -> dict:
+        """Explicitly delete one existing fact by id, with a mandatory audit trail.
+
+        Unlike `remove_fact` (no reason required), this is the governance
+        path: `reason` is mandatory and the deletion plus its audit row are
+        written in one transaction — a failed audit write rolls back the
+        deletion.
+
+        Raises:
+            ValueError: missing/blank `reason`.
+            KeyError: `fact_id` does not exist.
+        """
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValueError("reason is required")
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT content, category, trust_score FROM facts WHERE fact_id = ?",
+                (fact_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"fact_id {fact_id} not found")
+
+            old_content, old_category, old_trust = (
+                row["content"], row["category"], row["trust_score"]
+            )
+
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    "DELETE FROM fact_entities WHERE fact_id = ?", (fact_id,)
+                )
+                self._conn.execute("DELETE FROM facts WHERE fact_id = ?", (fact_id,))
+                self._conn.execute(
+                    """
+                    INSERT INTO fact_governance_audit
+                        (fact_id, action, old_content, new_content,
+                         old_category, new_category, old_trust, new_trust,
+                         reason, session_id)
+                    VALUES (?, 'forget', ?, NULL, ?, NULL, ?, NULL, ?, ?)
+                    """,
+                    (fact_id, old_content, old_category, old_trust, reason, session_id),
+                )
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+            else:
+                self._conn.execute("COMMIT")
+
+            self._rebuild_bank(old_category)
+
+            return {
+                "fact_id": fact_id,
+                "action": "forget",
+                "removed": True,
+                "old": {
+                    "content": old_content,
+                    "category": old_category,
+                    "trust_score": old_trust,
+                },
             }
 
     # ------------------------------------------------------------------

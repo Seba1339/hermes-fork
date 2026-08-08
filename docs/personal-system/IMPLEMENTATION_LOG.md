@@ -486,3 +486,70 @@ cualquier escritura, tal como hace `--apply` por diseño.
 
 Restaurar `agent_memory.db` y `memory_store.db` desde
 `/home/ubuntu/hermes-backups/memory-migration-20260808T191738Z`.
+
+## Entry 10 — 2026-08-08 — Gobernanza: mutaciones auditadas de hechos
+
+**Branch:** `feature/personal-system-memory-governance`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Store-level governance layer for `MemoryStore`: `update_fact_audited` and
+`forget_fact_audited`, the explicit-by-id counterparts to the existing
+`update_fact`/`remove_fact` (which stay unchanged). Both new methods
+require a non-blank `reason` (raise `ValueError` otherwise), operate only
+on an existing `fact_id` (raise `KeyError` if absent), and write the
+mutation plus a row in a new, purely additive `fact_governance_audit`
+table (`CREATE TABLE IF NOT EXISTS`, same pattern as `memory_banks`) in
+one explicit SQLite transaction (`BEGIN IMMEDIATE` / `COMMIT`, with
+`ROLLBACK` on any failure) — a failed audit write rolls back the
+mutation and vice versa. `update_fact_audited` never `INSERT`s into
+`facts` (UPDATE-only) and preserves the `content` UNIQUE dedup invariant
+(a colliding update is rejected via `IntegrityError` → `ValueError`, no
+silent merge); if every provided field already matches the current row
+(or no fields are provided), it is an explicit no-op — the `facts` row
+is left untouched but the attempt is still audited with the `reason`
+recorded and `old`/`new` fields absent. `forget_fact_audited` deletes the
+`facts` row (and its `fact_entities` links) and audits the prior
+content/category/trust before removal. The audit table stores only the
+fact's own before/after fields, `reason`, and optional `session_id` —
+never secrets or conversation transcripts.
+
+### Files changed
+
+- `plugins/memory/holographic/store.py` — `fact_governance_audit` table +
+  index (additive schema), `update_fact_audited`, `forget_fact_audited`.
+- `tests/plugins/memory/test_holographic_governance.py` — new.
+
+### Results
+
+- New test file — **21/21 passed**: audit-table additivity on fresh and
+  legacy DBs (idempotent reopen, no data loss), `update_fact_audited`
+  (content/category/trust changes, category bank moves, missing-reason
+  rejection, nonexistent `fact_id`, empty content, out-of-range
+  `trust_score`, dedup-collision rejection, no-op when values already
+  match or no fields given, never creates a new fact, rollback on
+  simulated audit-write failure), `forget_fact_audited` (removal +
+  audit record, missing-reason rejection, nonexistent `fact_id`, leaves
+  unrelated facts untouched, rollback on simulated audit-write failure).
+- Broader relevant suite — **58/58 passed**, 0 failed.
+- All databases used in tests are built under `tmp_path`; nothing under
+  `~/.hermes` or `~/.hermes-enhanced` was read or written. No config,
+  cron, or systemd/service interaction. No real data touched.
+
+### Rollback
+
+Every change in this entry is additive (new table, new methods; no
+existing method's behavior changed). Rollback is reverting this commit,
+or deleting the `feature/personal-system-memory-governance` branch — no
+data migration or config change occurred.
+
+### Pending / explicitly not done this entry
+
+Exposing `update_fact_audited`/`forget_fact_audited` as an agent-facing
+tool (schema + handler wiring in `plugins/memory/holographic/__init__.py`)
+remains not started — see `ROADMAP.md`'s cross-cutting section.
+
+### Push
+
+Pushed to `origin/feature/personal-system-memory-governance`.

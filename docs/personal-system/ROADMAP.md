@@ -147,6 +147,10 @@ Phases 3-4 producing data worth managing.
   is stale, rather than only ever adding new facts. Natural fit once
   Phase 3's `fact_type` field exists (an update needs somewhere to record
   *why* trust changed). Sequence after Phase 3, alongside or after Phase 4.
+  **Store-level half done (2026-08-08, see Phase 3E below):**
+  `MemoryStore.update_fact_audited`/`forget_fact_audited` exist and are
+  tested; exposing them as an agent-facing tool (schema + handler wiring in
+  `plugins/memory/holographic/__init__.py`) is still not started.
 
 ## What this roadmap explicitly does not authorize
 
@@ -259,3 +263,19 @@ and `bujo.sqlite` were not touched by this run — the tool only reads
 `agent_memory.db` and writes `memory_store.db`. Backups were taken before
 any write; see `IMPLEMENTATION_LOG.md` Entry 9 for the backup path, row
 counts, and post-migration dry-run verification.
+
+## Update — 2026-08-08 (9)
+
+Clarifying note, not a correction of fact: Updates (2) through (7) above
+each state "`auto_extract` remains `false` by default" and/or "no real
+data has been migrated or extracted." Those sentences describe the state
+*at the time each of those entries was written* (Phase 3A through 5A's
+offline-tool verification, all still-unapplied at that point). They are
+left unedited per this document's history — see Update (8) immediately
+above and `IMPLEMENTATION_LOG.md` Entry 9, which already record that
+Phase 5A's migration was subsequently applied for real, once, against
+the real Hermes paths, with backups taken first. `auto_extract` itself
+remains `false` by default independent of that migration — the two are
+separate switches (one governs automatic extraction from live sessions;
+the other was a one-time, manually-invoked backfill of pre-existing
+legacy rows) and neither this note nor Update (8) changes that default.
