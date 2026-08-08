@@ -205,3 +205,16 @@ facts a session *would* produce — no SQLite access, no `add_fact` calls, no
 side effects. `auto_extract` remains `false` by default; there is still no
 cron wiring and no real data has been migrated or extracted — see
 `IMPLEMENTATION_LOG.md` for verification steps and results.
+
+## Update — 2026-08-08 (5)
+
+Phase 3D (CLI wrapper for the dry-run preview) has been implemented on
+`feature/personal-system-extraction-cli`: `scripts/memory_preview.py`
+exposes `preview_extracted_facts()` as a standalone command,
+`python3 scripts/memory_preview.py --input transcript.json[l]
+[--session-id ID]`, taking an explicit JSON array or JSONL transcript
+file and printing candidate facts as JSON to stdout. It never opens
+SQLite and never resolves `HERMES_HOME`; there is still no cron wiring
+and no real data has been migrated or extracted. Rollback: delete the
+`feature/personal-system-extraction-cli` branch — see
+`IMPLEMENTATION_LOG.md` for verification steps and results.

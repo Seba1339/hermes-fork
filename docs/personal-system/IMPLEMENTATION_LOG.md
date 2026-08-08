@@ -332,3 +332,46 @@ datos reales involucrados en este cambio.
 ### Push
 
 Pushed to `origin/feature/personal-system-extraction-dry-run`.
+
+## Entry 6 — 2026-08-08 — Phase 3D: extraction preview CLI
+
+**Branch:** `feature/personal-system-extraction-cli`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+`scripts/memory_preview.py` envuelve
+`HolographicMemoryProvider.preview_extracted_facts()` en un CLI
+independiente:
+
+```
+python3 scripts/memory_preview.py --input transcript.json
+python3 scripts/memory_preview.py --input transcript.jsonl --session-id sess-42
+```
+
+Toma un transcript explícito vía `--input` (JSON: array de mensajes, o
+JSONL: un objeto por línea), y escribe el resultado (`candidates`, `count`,
+`session_id`) como JSON a stdout. No abre SQLite ni resuelve `HERMES_HOME`;
+`auto_extract` permanece en `false` por defecto y no hay wiring de cron ni
+datos reales migrados o extraídos.
+
+### Files changed
+
+- `scripts/memory_preview.py` — new.
+- `tests/scripts/test_memory_preview.py` — new.
+- `docs/personal-system/ROADMAP.md`
+- `docs/personal-system/IMPLEMENTATION_LOG.md`
+
+### Commands executed and results
+
+- New test file — **13/13 passed** (CLI), 0 failed.
+- Dry-run detection rules — **12/12 passed**, 0 failed.
+
+### Rollback
+
+Delete the `feature/personal-system-extraction-cli` branch; no other
+system was touched.
+
+### Push
+
+Pushed to `origin/feature/personal-system-extraction-cli`.
