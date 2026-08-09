@@ -763,3 +763,148 @@ protege rutas Hermes reales y usa rollback local y resultado JSON/log cuando
 se ejecuta sobre una copia offline. No detiene, inicia, reinicia ni cambia la
 base activa del gateway; esta fase no ejecuta ni afirma una nueva migración
 real.
+
+## Entry 16 — 2026-08-09 — Primera unidad funcional: verificación end-to-end del ciclo de extracción
+
+**Branch:** `feature/personal-system-functional-extraction`
+**Base commit:** `8b46911b8` (`feature/personal-system-detached-migration-runner`)
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Asegurar y verificar el ciclo de extracción automática al cierre de sesión
+para `HolographicMemoryProvider`, siguiendo el camino real
+`AIAgent`/`MemoryManager`/gateway. Autorizado: corregir un bug de wiring si
+existiera (mínima superficie), o si no existiera, añadir la observabilidad/
+test de contrato que falte, sin inventar extracción ni tocar configuración
+efectiva, servicios, cron, `.env`, o bases reales bajo `~/.hermes`/
+`~/.hermes-enhanced`.
+
+### Investigación (solo lectura)
+
+Se trazó el camino completo con lectura de código, sin modificar nada
+inicialmente:
+
+- `run_agent.py`: `AIAgent._session_messages` (línea 1704, actualizado en
+  cada turno por `_persist_session`), `shutdown_memory_provider()` (línea
+  3380), `commit_memory_session()` (línea 3407).
+- `cli.py:1103-1149` (salida de CLI) y `gateway/run.py:6138-6169`
+  (`_cleanup_agent_resources`, limpieza de agente cacheado): ambos ya
+  reenvían `_session_messages` real (fix histórico #15165, con tests
+  dedicados `tests/gateway/test_shutdown_memory_provider_messages.py` y
+  `tests/cli/test_cli_shutdown_memory_messages.py`).
+- `gateway/run.py:16619-16673` (`_commit_memory_before_soft_evict`, fix
+  histórico #11205): compensa el caso de soft-eviction por presión de
+  caché LRU antes de que el watcher de expiración vea el agente.
+- `agent/memory_manager.py:774-833` (`MemoryManager.on_session_end`,
+  `commit_session_boundary_async`): fan-out a todos los providers
+  registrados, sin filtrar ni transformar el transcript.
+- `plugins/memory/holographic/__init__.py:254-449`
+  (`HolographicMemoryProvider.on_session_end`, `_auto_extract_facts`,
+  `preview_extracted_facts`): sí evalúa `auto_extract` desde config, sí
+  aborta con `messages` vacío o sin store, sí filtra `role == "user"` y
+  contenido con prefijo `"[IMPORTANT:"`, sí pasa `session_id` y
+  `fact_type="extracted"` a `add_fact`.
+- `plugins/memory/holographic/store.py:290-349` (`MemoryStore.add_fact`):
+  dedup vía `UNIQUE(content)`, devuelve `fact_id` existente sin pisar
+  metadata en duplicado.
+
+Un subagente de exploración (`Explore`) hizo el mismo trazado en paralelo,
+de forma independiente, y llegó a la misma conclusión con las mismas citas
+de línea — usado como segunda verificación, no como fuente única.
+
+### Hallazgo
+
+**No hay bug de wiring.** El camino `AIAgent`/`MemoryManager`/
+`HolographicMemoryProvider` ya estaba correctamente cableado antes de esta
+fase, incluyendo dos fixes históricos (#15165 transcript vacío, #11205
+soft-eviction) ya verificados con tests propios. Por lo tanto esta fase no
+modificó ningún archivo de producción — cero cambios en
+`plugins/memory/holographic/__init__.py`, `plugins/memory/holographic/store.py`,
+`agent/memory_manager.py`, `run_agent.py`, `cli.py`, ni `gateway/run.py`.
+
+Lo que sí faltaba: un test que ejercitara el camino completo
+*`config.yaml` real en disco → `MemoryManager.on_session_end` → persistencia*
+en una sola prueba end-to-end, incluyendo dedup en una segunda llamada real
+(no una llamada directa a `_auto_extract_facts`) y el caso de transcript
+vacío bajo `auto_extract: true` activo (antes solo estaba cubierto el caso
+`auto_extract: false`).
+
+### Files changed
+
+- `tests/plugins/memory/test_holographic_session_extraction_e2e.py` — new,
+  4 tests.
+- `docs/personal-system/ROADMAP.md` — nueva sección de update.
+- `docs/personal-system/IMPLEMENTATION_LOG.md` — this entry.
+
+### Qué cubre el test nuevo
+
+1. `test_mixed_transcript_persists_exactly_one_fact_with_session_id` —
+   config real en disco con `auto_extract: true`, provider construido sin
+   pasar `config=` (fuerza `_load_plugin_config()` a leer el archivo),
+   registrado en un `MemoryManager` real, transcript con roles
+   `system`/`user`/`assistant`/`tool` y un mensaje `"[IMPORTANT:"` —
+   verifica exactamente 1 fact con `session_id`/`fact_type` correctos.
+2. `test_second_session_end_call_dedups_instead_of_duplicating` — llama
+   `manager.on_session_end(...)` dos veces con el mismo transcript;
+   verifica que la segunda no duplica.
+3. `test_empty_transcript_writes_nothing` — `on_session_end([])` con
+   `auto_extract: true`; verifica cero facts.
+4. `test_auto_extract_false_from_disk_config_skips_extraction` — mismo
+   camino de carga desde disco, pero `auto_extract: false`; verifica que
+   el gate lee el valor real del archivo.
+
+### Commands executed and results
+
+```bash
+bash scripts/run_tests.sh tests/plugins/memory/test_holographic_session_extraction_e2e.py -q
+bash scripts/run_tests.sh tests/plugins/memory/ tests/agent/test_memory_boundary_commit.py \
+    tests/agent/test_memory_skill_scaffolding.py \
+    tests/gateway/test_shutdown_memory_provider_messages.py \
+    tests/cli/test_cli_shutdown_memory_messages.py \
+    tests/run_agent/test_commit_memory_session_context_engine.py -q
+python3 -m py_compile tests/plugins/memory/test_holographic_session_extraction_e2e.py
+git diff --check
+```
+
+- New test file — **4/4 passed**, 0 failed.
+- Broader regression check (memory plugin suite + all session-boundary /
+  shutdown-messages tests, chosen because they're the tests nearest the
+  code this phase read/reasoned about) — **572/572 passed**, 0 failed. No
+  regression.
+- `py_compile` — clean.
+- `git diff --check` — clean, no whitespace errors.
+
+### No production code, config, service, or real data touched
+
+`git diff main --stat` for this branch shows only the test file and the two
+docs files. No file under `~/.hermes` or `~/.hermes-enhanced` was read or
+written (the test's `HERMES_HOME` is the per-test tempdir the
+`_hermetic_environment` autouse fixture already provides). No service was
+restarted, no cron/`.env` file touched, no `sudo` used.
+
+### What this entry does NOT establish
+
+Same limitation `ROADMAP.md`'s 2026-08-09 update already flagged before this
+phase, restated because it remains true after this phase too: **natural
+extraction in production is still unmeasured.** This entry proves the code
+path is wired correctly against synthetic transcripts and temp SQLite; it
+does not measure real extraction volume, false-positive rate of
+`_PREF_PATTERNS`/`_DECISION_PATTERNS` against real conversational language,
+or dedup behavior across real sessions with differently-worded restatements
+of the same fact. No preview/diagnostic route was added because
+`preview_extracted_facts()` (Phase 3C) and `scripts/memory_preview.py`
+(Phase 3D) already provide a safe, read-only way to inspect what a real
+transcript would extract without writing anything — duplicating that would
+have been unnecessary surface.
+
+### Rollback
+
+Additive-only change (new test file, doc updates only). Rollback is
+reverting this commit, or deleting the
+`feature/personal-system-functional-extraction` branch — no production
+code, config, or real data was touched.
+
+### Push
+
+Pushed to `origin/feature/personal-system-functional-extraction`.

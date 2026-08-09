@@ -397,3 +397,108 @@ migraciones offline: plan-only por defecto, Python del venv fijado, unidad
 transient nueva y rollback local ante fallo. No detiene, inicia, reinicia ni
 intercambia la base del gateway; cualquier operación sobre la base activa
 sigue requiriendo un procedimiento administrativo separado.
+
+## Update — 2026-08-09 — Primera unidad funcional: ciclo de extracción verificado end-to-end
+
+**Branch:** `feature/personal-system-functional-extraction`.
+
+**Hechos verificados por lectura de código (no inferidos):**
+
+- El camino real `AIAgent` → `MemoryManager` → `HolographicMemoryProvider`
+  ya estaba correctamente cableado antes de esta fase:
+  - `AIAgent.shutdown_memory_provider()`/`commit_memory_session()`
+    (`run_agent.py:3380`, `3407`) reciben `self._session_messages`, el
+    transcript real, actualizado en cada turno por `_persist_session`
+    (`run_agent.py:1704`).
+  - Los dos call sites de producción (`cli.py:1134-1147` salida de CLI, y
+    `gateway/run.py:6138-6158` limpieza de agente en el gateway) ya pasan
+    ese transcript real — no una lista vacía — y ese fix ya estaba probado
+    (`tests/gateway/test_shutdown_memory_provider_messages.py`,
+    `tests/cli/test_cli_shutdown_memory_messages.py`, issue #15165). El
+    camino de soft-eviction por presión de caché (`gateway/run.py:16619`
+    `_commit_memory_before_soft_evict`, issue #11205) también compensa el
+    caso en que el watcher de expiración nunca ve el agente.
+  - `HolographicMemoryProvider.on_session_end`
+    (`plugins/memory/holographic/__init__.py:254`) sí evalúa
+    `self._config.get("auto_extract", False)` antes de extraer, y sí
+    aborta si `messages` está vacío o si no hay store inicializado.
+  - `_auto_extract_facts`/`preview_extracted_facts` sí filtran por
+    `role == "user"` (excluye `assistant`/`system`/`tool` por
+    construcción), sí excluyen contenido que empieza con `"[IMPORTANT:"`,
+    y sí pasan `session_id` y `fact_type="extracted"` a
+    `MemoryStore.add_fact`, que los persiste en columnas dedicadas.
+  - El dedup existe a nivel de `MemoryStore.add_fact` vía `UNIQUE` sobre
+    `content` (`store.py:20`): una re-inserción del mismo contenido
+    devuelve el `fact_id` existente sin duplicar fila ni pisar su
+    `session_id`/`fact_type` originales.
+
+**Conclusión: no se encontró bug de wiring.** No se modificó ningún archivo
+de producción (`plugins/memory/holographic/__init__.py`,
+`plugins/memory/holographic/store.py`, `agent/memory_manager.py`,
+`run_agent.py`, `cli.py`, `gateway/run.py` quedan byte-idénticos a `main`
+en esta rama). La superficie de cambio de esta fase es exclusivamente un
+archivo de test nuevo.
+
+**Lo que sí faltaba — y que esta fase añadió:** ningún test existente
+ejercitaba el camino completo *config real en disco → `MemoryManager` →
+persistencia* en una sola prueba. Los tests previos
+(`test_holographic_extraction_metadata.py`,
+`test_holographic_extraction_dry_run.py`) pasan `config={...}` directo al
+constructor y en varios casos llaman `_auto_extract_facts` directamente,
+saltándose tanto la carga de `config.yaml` como el gate de
+`on_session_end` y el fan-out de `MemoryManager`. El archivo nuevo
+`tests/plugins/memory/test_holographic_session_extraction_e2e.py` cierra
+ese hueco:
+
+- Escribe un `config.yaml` real bajo `HERMES_HOME` (el tempdir por-test
+  que ya provee la fixture autouse `_hermetic_environment` de
+  `tests/conftest.py`) con `auto_extract: true`, tal como lo haría
+  `~/.hermes-enhanced/config.yaml` en producción.
+- Construye `HolographicMemoryProvider()` **sin** pasar `config=` al
+  constructor, forzando la carga real desde disco vía
+  `_load_plugin_config()`.
+- Lo registra en un `MemoryManager` real y llama
+  `manager.on_session_end(...)` — el mismo método que invocan
+  `AIAgent.shutdown_memory_provider`/`commit_memory_session` en
+  producción — en vez de llamar métodos internos del provider.
+- Verifica, en una sola prueba, sobre un transcript con roles mixtos
+  (`system`/`user`/`assistant`/`tool` y un mensaje `"[IMPORTANT:"`), que
+  se persiste **exactamente un** fact, con el `session_id` y
+  `fact_type="extracted"` correctos.
+- Verifica que una **segunda** llamada a `on_session_end` con el mismo
+  transcript (simulando un segundo cierre de sesión real, no una llamada
+  directa a `_auto_extract_facts`) no duplica la fila — dedup a través del
+  camino cableado completo, no solo a nivel de store.
+- Verifica que una sesión con transcript **vacío** (`on_session_end([])`)
+  con `auto_extract: true` no escribe nada — el caso vacío bajo el gate
+  activado, que no estaba cubierto (solo existía el caso
+  `auto_extract: false` + mensajes no vacíos).
+- Verifica que `auto_extract: false` cargado desde disco (no desde un
+  dict de test) también bloquea la extracción — prueba que el gate lee
+  el valor real del archivo, no una constante hardcodeada en el fixture.
+
+**Explícitamente fuera de alcance de esta fase (solo test + docs):** no
+se tocó `config.yaml` real ni ninguna base bajo `~/.hermes` o
+`~/.hermes-enhanced`, no se reinició ningún servicio, no se cambió ningún
+default de `auto_extract`, y no se añadió ninguna ruta de
+preview/diagnóstico nueva — `preview_extracted_facts()` y
+`scripts/memory_preview.py` (Fase 3C/3D) ya cubren esa necesidad y no
+hacía falta duplicarla.
+
+**Limitación que sigue sin resolverse — la más importante de anotar:**
+esta fase (como todas las anteriores de Fase 3) prueba el ciclo completo
+contra transcripts sintéticos y SQLite temporal. **Sigue sin haber ninguna
+medición de la extracción natural en producción**: cuántos facts extrae
+`on_session_end` en sesiones reales del gateway, con qué `session_id`, con
+qué tasa de falsos positivos de los patrones `_PREF_PATTERNS`/
+`_DECISION_PATTERNS` sobre lenguaje natural real (no frases de test
+construidas para matchear), ni cómo se comporta el dedup por `UNIQUE(content)`
+cuando el mismo hecho se expresa con distinta redacción en sesiones
+distintas. Ver la sección "Update — 2026-08-09 — `auto_extract`: estado
+actual" más arriba, que ya señalaba este mismo hueco antes de esta fase;
+esta fase reduce el riesgo de que el *código* tenga un bug de wiring, pero
+no reduce el riesgo de que las *reglas de detección* generen ruido en
+producción — eso solo se puede medir observando extracciones reales (por
+ejemplo, vía `scripts/memory_audit.py` contra `memory_store.db` real,
+sin tocar nada) y queda pendiente para una fase futura con supervisión
+explícita del usuario.
