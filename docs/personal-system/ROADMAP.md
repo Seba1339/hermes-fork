@@ -9,7 +9,7 @@
 > (`ARCHITECTURE.md` §8) and the framework benchmark
 > (`EXTERNAL_AGENT_PATTERNS.md`), and states what each phase is allowed to
 > touch.
-> **Last updated:** 2026-08-08
+> **Last updated:** 2026-08-09
 
 ## How to read this roadmap
 
@@ -332,3 +332,60 @@ mitad de camino, se hace rollback total y ninguna fila queda escrita a
 medias. Suite relevante verificada en **54/54**. Esto no implica una
 migración real; sigue siendo una herramienta de prueba/dry-run sobre
 rutas no reales.
+
+## Update — 2026-08-09 — `auto_extract`: estado actual (código vs. configuración efectiva)
+
+Varias entradas históricas de este documento y de `IMPLEMENTATION_LOG.md`
+(Updates (2) a (7), Entries 4-6) dicen "`auto_extract` remains `false` by
+default" o equivalente. Esa frase describe el **default del código**, no
+la **configuración efectiva** del gateway real, y esas entradas nunca
+auditaron el archivo de configuración real — no son incorrectas para lo
+que describían, pero pueden leerse como si implicaran que la extracción
+automática está desactivada en el sistema en vivo. No lo está. Esta
+sección distingue las tres cosas explícitamente, sin editar ni borrar el
+histórico anterior (que queda como registro del estado de implementación
+de aquel momento):
+
+- **Default del código:** `plugins/memory/holographic/__init__.py`
+  registra `auto_extract` con `"default": "false"` en su esquema de
+  configuración, y `on_session_end()` usa
+  `self._config.get("auto_extract", False)` como fallback si la clave no
+  está presente. Si no hay configuración explícita, la extracción
+  automática está desactivada.
+- **Configuración efectiva:** `~/.hermes-enhanced/config.yaml` (fuera de
+  este repo, archivo real del usuario, no versionado aquí) fija
+  explícitamente `plugins.hermes-memory-store.auto_extract: true`. Esto
+  anula el default del código: en el gateway tal como está configurado
+  hoy, `on_session_end()` sí invoca `_auto_extract_facts()` al final de
+  cada sesión.
+- **Riesgos de esta discrepancia:**
+  - Cualquier lectura futura de este roadmap o del log que asuma
+    "auto_extract sigue en false" porque así lo dicen las entradas
+    históricas estaría equivocada respecto al sistema en vivo — el
+    default de código y la config efectiva son cosas distintas, y solo la
+    segunda determina el comportamiento real.
+  - Todo el trabajo de Fases 3B-3D (`_auto_extract_facts`,
+    `preview_extracted_facts`, `scripts/memory_preview.py`) fue construido
+    y probado con SQLite temporal y transcripts explícitos, nunca contra
+    sesiones reales del gateway con `auto_extract: true` — no hay
+    todavía ninguna medición de cuántos hechos extrae en la práctica, con
+    qué `session_id`, ni con qué tasa de falsos positivos o de
+    duplicados evitados por el dedup existente de `add_fact`.
+  - No hay wiring de cron ni de rollback específico para la extracción
+    automática en sí (distinto del rollback de la migración por lote de
+    Fase 5A, que es un mecanismo separado).
+
+**Explícitamente fuera de alcance de esta fase (solo documentación):**
+esta fase no activa, desactiva ni modifica `auto_extract` en ningún
+archivo de configuración, real o de prueba — no toca `config.yaml`, no
+toca `~/.hermes-enhanced`, y no cambia ningún default en el código. Antes
+de que cualquier fase futura decida tocar ese valor, debe validarse por
+separado, contra datos no reales o con supervisión explícita del usuario:
+número y contenido de los facts efectivamente extraídos, correcta
+asociación de `session_id`, tasa de falsos positivos de las reglas de
+detección, y que la deduplicación existente (`UNIQUE` sobre `content` en
+`add_fact`) se comporta correctamente bajo extracción repetida entre
+sesiones. Ninguna de esas validaciones, ni esta nota, implica que se vaya
+a ejecutar una migración real de datos — es una aclaración documental
+sobre un estado de configuración que ya existía, no un cambio de
+comportamiento.

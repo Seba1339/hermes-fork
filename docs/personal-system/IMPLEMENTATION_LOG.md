@@ -666,3 +666,90 @@ Pushed to `origin/feature/personal-system-memory-governance-cli`.
 realiza rollback total si falla una inserción o actualización intermedia.
 La corrección fue validada con un test de fallo parcial y no implica ninguna
 migración real ni modificación de bases de producción.
+
+---
+
+## Entry 14 — 2026-08-09 — Aclaración documental: `auto_extract`, default vs. configuración efectiva
+
+**Branch:** `feature/personal-system-auto-extract-docs`
+**Author:** Claude (agent), directed by Sebastián Alvarez
+
+### Scope
+
+Solo documentación. Ningún archivo de código, configuración, servicio,
+cron o `.env` fue leído para modificarse, y ninguno de esos fue tocado.
+Se leyó (sin modificar) `~/.hermes-enhanced/config.yaml`, fuera de este
+repo, únicamente para verificar el valor de una clave — `auto_extract`
+bajo `plugins.hermes-memory-store` — sin copiar ningún otro contenido
+del archivo (que incluye una clave de API en otra línea) a ningún
+archivo de este repo.
+
+### Qué se corrigió
+
+Varias entradas históricas de este log (Entries 4-6) y varios "Update"
+de `ROADMAP.md` (Updates (2)-(7)) afirman "`auto_extract` remains
+`false` by default". Esa frase es correcta como descripción del **default
+del código** (`plugins/memory/holographic/__init__.py`: esquema de
+configuración con `"default": "false"`, y
+`on_session_end()` usando `self._config.get("auto_extract", False)` como
+fallback), pero ninguna de esas entradas verificó la **configuración
+efectiva** del gateway real. Esa verificación, hecha en esta entrada,
+confirma que `~/.hermes-enhanced/config.yaml` fija explícitamente
+`plugins.hermes-memory-store.auto_extract: true` — es decir, en el
+sistema tal como está configurado hoy, la extracción automática al
+final de sesión sí está activa, al margen de cuál sea el default del
+código.
+
+Las entradas históricas no se editaron ni se borraron — describen
+correctamente el estado del código en el momento en que se escribieron
+y se conservan como registro de implementación. `ROADMAP.md` recibió una
+sección nueva ("Update — 2026-08-09 — `auto_extract`: estado actual
+(código vs. configuración efectiva)") que distingue explícitamente
+default del código, configuración efectiva, y riesgos derivados de la
+discrepancia entre ambos.
+
+### Qué NO hace esta entrada
+
+- No activa, desactiva ni modifica `auto_extract` en ningún archivo de
+  configuración, real o de prueba.
+- No modifica `plugins/memory/holographic/__init__.py` ni ningún otro
+  archivo de código.
+- No implica ni ejecuta ninguna migración real de datos.
+- No valida todavía la extracción automática en producción — esa
+  validación (facts efectivamente extraídos, asociación correcta de
+  `session_id`, tasa de falsos positivos, comportamiento de la
+  deduplicación de `add_fact` bajo extracción repetida) queda pendiente
+  y explícitamente fuera de esta fase, per `ROADMAP.md`.
+
+### Files changed
+
+- `docs/personal-system/ROADMAP.md`
+- `docs/personal-system/IMPLEMENTATION_LOG.md` — this entry.
+
+### Commands executed and results
+
+```bash
+grep -n "auto_extract" ~/.hermes-enhanced/config.yaml   # read-only
+grep -n "auto_extract" plugins/memory/holographic/__init__.py   # read-only
+git diff --check
+```
+
+- `~/.hermes-enhanced/config.yaml` — confirmed
+  `plugins.hermes-memory-store.auto_extract: true` (real, effective
+  configuration; file not modified, not copied into the repo beyond this
+  one key/value pair).
+- `plugins/memory/holographic/__init__.py` — confirmed code-level default
+  is `false` (schema `"default": "false"`; `on_session_end()` fallback
+  `False`). File not modified.
+- `git diff --check` — clean, no whitespace errors.
+
+### Rollback
+
+Docs-only, additive change (new section in `ROADMAP.md`, new entry here).
+Rollback is reverting this commit, or deleting the
+`feature/personal-system-auto-extract-docs` branch — no code, config,
+service, cron, `.env`, database, or real data was touched.
+
+### Push
+
+Pushed to `origin/feature/personal-system-auto-extract-docs`.
