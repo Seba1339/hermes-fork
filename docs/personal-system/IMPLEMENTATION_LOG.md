@@ -753,3 +753,13 @@ service, cron, `.env`, database, or real data was touched.
 ### Push
 
 Pushed to `origin/feature/personal-system-auto-extract-docs`.
+
+## Entry 15 — Runner de migración desacoplado
+
+Se añadió `scripts/memory_migrate_detached.py` junto con
+`docs/personal-system/DETACHED_MIGRATION_RUNNER.md`. La herramienta es
+plan-only por defecto, fija el Python del venv, exige rutas explícitas,
+protege rutas Hermes reales y usa rollback local y resultado JSON/log cuando
+se ejecuta sobre una copia offline. No detiene, inicia, reinicia ni cambia la
+base activa del gateway; esta fase no ejecuta ni afirma una nueva migración
+real.

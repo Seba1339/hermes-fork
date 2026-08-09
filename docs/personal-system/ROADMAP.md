@@ -389,3 +389,11 @@ sesiones. Ninguna de esas validaciones, ni esta nota, implica que se vaya
 a ejecutar una migración real de datos — es una aclaración documental
 sobre un estado de configuración que ya existía, no un cambio de
 comportamiento.
+
+## Update — runner de migración desacoplado (herramienta versionada)
+
+Se añadió `scripts/memory_migrate_detached.py` como wrapper seguro para
+migraciones offline: plan-only por defecto, Python del venv fijado, unidad
+transient nueva y rollback local ante fallo. No detiene, inicia, reinicia ni
+intercambia la base del gateway; cualquier operación sobre la base activa
+sigue requiriendo un procedimiento administrativo separado.
