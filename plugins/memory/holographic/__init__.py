@@ -64,7 +64,10 @@ FACT_STORE_SCHEMA = {
         "• related — What connects to an entity? Structural adjacency.\n"
         "• reason — Compositional: facts connected to MULTIPLE entities simultaneously.\n"
         "• contradict — Memory hygiene: find facts making conflicting claims.\n"
-        "• update/remove/list — CRUD operations.\n\n"
+        "• list — Browse stored facts.\n\n"
+        "To correct or delete an existing fact, use the separate memory_governance "
+        "tool instead — every correction/removal there requires an explicit reason "
+        "and is written to a local audit trail.\n\n"
         "IMPORTANT: Before answering questions about the user, ALWAYS probe or reason first."
     ),
     "parameters": {
@@ -72,20 +75,62 @@ FACT_STORE_SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["add", "search", "probe", "related", "reason", "contradict", "update", "remove", "list"],
+                "enum": ["add", "search", "probe", "related", "reason", "contradict", "list"],
             },
             "content": {"type": "string", "description": "Fact content (required for 'add')."},
             "query": {"type": "string", "description": "Search query (required for 'search')."},
             "entity": {"type": "string", "description": "Entity name for 'probe'/'related'."},
             "entities": {"type": "array", "items": {"type": "string"}, "description": "Entity names for 'reason'."},
-            "fact_id": {"type": "integer", "description": "Fact ID for 'update'/'remove'."},
             "category": {"type": "string", "enum": ["user_pref", "project", "tool", "general"]},
             "tags": {"type": "string", "description": "Comma-separated tags."},
-            "trust_delta": {"type": "number", "description": "Trust adjustment for 'update'."},
             "min_trust": {"type": "number", "description": "Minimum trust filter (default: 0.3)."},
             "limit": {"type": "integer", "description": "Max results (default: 10)."},
         },
         "required": ["action"],
+    },
+}
+
+MEMORY_GOVERNANCE_SCHEMA = {
+    "name": "memory_governance",
+    "description": (
+        "Audited correction/removal of an existing fact_store entry — the ONLY "
+        "agent-facing way to change or delete a fact once stored. Every call "
+        "requires 'fact_id' and a non-empty 'reason'; the mutation and its "
+        "audit row are written atomically to fact_governance_audit, so there "
+        "is no way to change or remove a fact without a recorded reason.\n\n"
+        "ACTIONS:\n"
+        "• update — Correct content/category/trust_score on an existing fact. "
+        "Only these three fields may change.\n"
+        "• forget — Permanently delete a fact. Also requires confirm_forget=true; "
+        "a call without it is rejected before anything is read or written.\n\n"
+        "This tool never adds new facts (use fact_store action='add') and "
+        "handles exactly one fact_id per call."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["update", "forget"]},
+            "fact_id": {"type": "integer", "description": "The existing fact to update or forget. Required."},
+            "reason": {
+                "type": "string",
+                "description": "Mandatory human-readable reason, recorded in fact_governance_audit.",
+            },
+            "content": {"type": "string", "description": "[update] New content."},
+            "category": {
+                "type": "string",
+                "enum": ["user_pref", "project", "tool", "general"],
+                "description": "[update] New category.",
+            },
+            "trust_score": {
+                "type": "number",
+                "description": "[update] New absolute trust_score in [0.0, 1.0] (not a delta).",
+            },
+            "confirm_forget": {
+                "type": "boolean",
+                "description": "[forget] Must be true to confirm permanent deletion.",
+            },
+        },
+        "required": ["action", "fact_id", "reason"],
     },
 }
 
@@ -297,7 +342,7 @@ class HolographicMemoryProvider(MemoryProvider):
         pass
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
-        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA, HANDOFF_SCHEMA]
+        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA, HANDOFF_SCHEMA, MEMORY_GOVERNANCE_SCHEMA]
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
         if tool_name == "fact_store":
@@ -306,6 +351,8 @@ class HolographicMemoryProvider(MemoryProvider):
             return self._handle_fact_feedback(args)
         elif tool_name == "memory_handoff":
             return self._handle_memory_handoff(args)
+        elif tool_name == "memory_governance":
+            return self._handle_memory_governance(args)
         return tool_error(f"Unknown tool: {tool_name}")
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
@@ -398,19 +445,12 @@ class HolographicMemoryProvider(MemoryProvider):
                 )
                 return json.dumps({"results": results, "count": len(results)})
 
-            elif action == "update":
-                updated = store.update_fact(
-                    int(args["fact_id"]),
-                    content=args.get("content"),
-                    trust_delta=float(args["trust_delta"]) if "trust_delta" in args else None,
-                    tags=args.get("tags"),
-                    category=args.get("category"),
+            elif action in ("update", "remove"):
+                return tool_error(
+                    f"action '{action}' is not available on fact_store; use the "
+                    "memory_governance tool instead (requires fact_id + reason; "
+                    "'forget' also requires confirm_forget=true)."
                 )
-                return json.dumps({"updated": updated})
-
-            elif action == "remove":
-                removed = store.remove_fact(int(args["fact_id"]))
-                return json.dumps({"removed": removed})
 
             elif action == "list":
                 facts = store.list_facts(
@@ -494,6 +534,62 @@ class HolographicMemoryProvider(MemoryProvider):
 
         except KeyError as exc:
             return tool_error(f"Missing required argument: {exc}")
+        except ValueError as exc:
+            return tool_error(str(exc))
+        except Exception as exc:
+            return tool_error(str(exc))
+
+    def _handle_memory_governance(self, args: dict) -> str:
+        """Sole agent-facing route to `update_fact_audited`/`forget_fact_audited`.
+
+        Deliberately separate from `_handle_fact_store`: this is the only path
+        by which the agent can mutate or delete an existing fact, and it never
+        falls back to the unaudited `store.update_fact`/`store.remove_fact`
+        (those stay as internal APIs for scripts/memory_migrate.py and callers
+        that don't need a reason, but are not reachable from this tool).
+        """
+        try:
+            action = args["action"]
+            fact_id = int(args["fact_id"])
+            reason = args["reason"]
+        except KeyError as exc:
+            return tool_error(f"Missing required argument: {exc}")
+
+        reason = (reason or "").strip()
+        if not reason:
+            return tool_error("reason must not be empty")
+
+        store = self._store
+        if store is None:
+            return tool_error("memory store not initialized")
+
+        try:
+            if action == "update":
+                result = store.update_fact_audited(
+                    fact_id,
+                    reason=reason,
+                    content=args.get("content"),
+                    category=args.get("category"),
+                    trust_score=args.get("trust_score"),
+                    session_id=self._session_id,
+                )
+                return json.dumps(result)
+
+            elif action == "forget":
+                if not args.get("confirm_forget"):
+                    return tool_error(
+                        "forget requires confirm_forget=true to confirm permanent deletion"
+                    )
+                result = store.forget_fact_audited(
+                    fact_id, reason=reason, session_id=self._session_id
+                )
+                return json.dumps(result)
+
+            else:
+                return tool_error(f"Unknown action: {action}")
+
+        except KeyError as exc:
+            return tool_error(str(exc))
         except ValueError as exc:
             return tool_error(str(exc))
         except Exception as exc:

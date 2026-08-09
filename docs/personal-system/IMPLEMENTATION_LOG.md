@@ -919,3 +919,14 @@ creación puede conservar el `session_id` actual. Los handoffs son estado de
 trabajo mutable, separado de facts y BuJo: no generan tareas, eventos,
 recordatorios ni escrituras fuera de la base configurada por el provider.
 La fase se prueba solamente contra SQLite temporal.
+
+## Entry 18 — Gobernanza agent-facing auditada
+
+El provider ahora expone `memory_governance` para `update` y `forget`. Cada
+acción requiere `fact_id` y `reason`; olvidar requiere además
+`confirm_forget: true`. Las acciones mutantes antiguas de `fact_store` ya no
+se exponen y sus invocaciones directas son rechazadas. Las operaciones
+válidas llaman exclusivamente a `update_fact_audited`/
+`forget_fact_audited`, con auditoría transaccional en
+`fact_governance_audit`. Tests y validación usan SQLite temporal; no se
+modificaron facts reales.

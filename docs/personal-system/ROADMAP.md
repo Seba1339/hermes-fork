@@ -511,3 +511,12 @@ handoff con estado, resumen, próximos pasos, bloqueos, responsable y
 `session_id`. Es una estructura mutable separada de facts y BuJo: no crea
 tareas, eventos, recordatorios ni entradas de agenda. Implementación y tests
 usan SQLite temporal; no implica escritura en la base activa.
+
+## Update — gobernanza agent-facing auditada
+
+Se añadió `memory_governance` como único tool del provider para actualizar u
+olvidar facts existentes. Exige `fact_id` y una razón; `forget` exige además
+`confirm_forget: true`. Las rutas antiguas `fact_store update/remove` dejaron
+de estar expuestas y son rechazadas si se invocan. Cada mutación autorizada
+usa las APIs auditadas y registra la operación atómicamente en
+`fact_governance_audit`. Sin cambios sobre datos reales en esta fase.
