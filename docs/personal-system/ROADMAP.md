@@ -499,6 +499,15 @@ actual" más arriba, que ya señalaba este mismo hueco antes de esta fase;
 esta fase reduce el riesgo de que el *código* tenga un bug de wiring, pero
 no reduce el riesgo de que las *reglas de detección* generen ruido en
 producción — eso solo se puede medir observando extracciones reales (por
-ejemplo, vía `scripts/memory_audit.py` contra `memory_store.db` real,
+por ejemplo, vía `scripts/memory_audit.py` contra `memory_store.db` real,
 sin tocar nada) y queda pendiente para una fase futura con supervisión
 explícita del usuario.
+
+## Update — handoffs persistentes para trabajos retomables
+
+Se añadió la tabla additive `memory_handoffs` y el tool `memory_handoff` del
+provider holográfico. Permite crear, consultar, listar y actualizar un
+handoff con estado, resumen, próximos pasos, bloqueos, responsable y
+`session_id`. Es una estructura mutable separada de facts y BuJo: no crea
+tareas, eventos, recordatorios ni entradas de agenda. Implementación y tests
+usan SQLite temporal; no implica escritura en la base activa.

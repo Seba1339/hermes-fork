@@ -102,6 +102,33 @@ CREATE TABLE IF NOT EXISTS fact_governance_audit (
 
 CREATE INDEX IF NOT EXISTS idx_fact_governance_audit_fact_id
     ON fact_governance_audit(fact_id);
+
+-- Persistent handoffs for resumable work/projects — explicit and separate
+-- from `facts` (see fact_store): a handoff is mutable work-in-progress
+-- state (title/status/summary/next_steps/blockers), not a durable fact
+-- about the world, but is still retrievable by the agent across sessions
+-- via get_handoff/list_handoffs. Additive and idempotent like
+-- memory_banks/fact_governance_audit above: a whole new table needs no
+-- PRAGMA-detect/ALTER-TABLE dance. Deliberately NOT deduplicated by
+-- title/content (unlike facts' UNIQUE(content)) — see
+-- MemoryStore.create_handoff for why.
+CREATE TABLE IF NOT EXISTS memory_handoffs (
+    handoff_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open',
+    summary     TEXT NOT NULL DEFAULT '',
+    next_steps  TEXT NOT NULL DEFAULT '',
+    blockers    TEXT NOT NULL DEFAULT '',
+    owner       TEXT,
+    session_id  TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_handoffs_status
+    ON memory_handoffs(status);
+CREATE INDEX IF NOT EXISTS idx_memory_handoffs_session
+    ON memory_handoffs(session_id);
 """
 
 # Trust adjustment constants
@@ -114,6 +141,11 @@ _TRUST_MAX       =  1.0
 # typo silently create an unrecognised bucket that retrieval/lifecycle code
 # never accounts for.
 VALID_FACT_TYPES = frozenset({"explicit", "extracted", "correlated", "pattern"})
+
+# Valid values for memory_handoffs.status — same rationale as
+# VALID_FACT_TYPES: reject an unrecognised status rather than let a typo
+# silently create a bucket that handoff_list filtering never accounts for.
+VALID_HANDOFF_STATUSES = frozenset({"open", "in_progress", "blocked", "done", "abandoned"})
 
 # Entity extraction patterns
 _RE_CAPITALIZED  = re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b')
@@ -786,6 +818,175 @@ class MemoryStore:
                     "trust_score": old_trust,
                 },
             }
+
+    # ------------------------------------------------------------------
+    # Handoffs: persistent, resumable work/project state
+    # ------------------------------------------------------------------
+    #
+    # Deliberately separate from `facts`: a handoff is explicit,
+    # work-in-progress state, not a durable fact about the world, and its
+    # content is expected to change as work progresses (that's what
+    # update_handoff is for). It is NOT deduplicated by title or content —
+    # unlike add_fact's UNIQUE(content), the same title can legitimately
+    # recur across unrelated pieces of work over time, so create_handoff
+    # always inserts a new row. `handoff_id` is the stable identifier:
+    # it is assigned once at creation, never reassigned by update_handoff,
+    # and is the only way to address a specific handoff via
+    # get_handoff/update_handoff.
+
+    def create_handoff(
+        self,
+        title: str,
+        *,
+        status: str = "open",
+        summary: str = "",
+        next_steps: str = "",
+        blockers: str = "",
+        owner: "str | None" = None,
+        session_id: "str | None" = None,
+    ) -> int:
+        """Create a new handoff and return its stable handoff_id.
+
+        Raises ValueError if title is empty or status is not one of
+        VALID_HANDOFF_STATUSES. Always inserts a new row — see the section
+        note above for why handoffs are not deduplicated like facts.
+        """
+        title = (title or "").strip()
+        if not title:
+            raise ValueError("title must not be empty")
+        if status not in VALID_HANDOFF_STATUSES:
+            raise ValueError(
+                f"status must be one of {sorted(VALID_HANDOFF_STATUSES)}, got {status!r}"
+            )
+        with self.transaction():
+            cur = self._conn.execute(
+                """
+                INSERT INTO memory_handoffs
+                    (title, status, summary, next_steps, blockers, owner, session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (title, status, summary or "", next_steps or "", blockers or "", owner, session_id),
+            )
+            handoff_id: int = cur.lastrowid  # type: ignore[assignment]
+        return handoff_id
+
+    def get_handoff(self, handoff_id: int) -> "dict | None":
+        """Fetch one handoff by its stable id. Returns None if it does not exist."""
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT handoff_id, title, status, summary, next_steps, blockers,
+                       owner, session_id, created_at, updated_at
+                FROM memory_handoffs WHERE handoff_id = ?
+                """,
+                (handoff_id,),
+            ).fetchone()
+            return self._row_to_dict(row) if row is not None else None
+
+    def list_handoffs(
+        self,
+        status: "str | None" = None,
+        session_id: "str | None" = None,
+        owner: "str | None" = None,
+        limit: int = 50,
+    ) -> "list[dict]":
+        """List handoffs, most recently updated first, optionally filtered.
+
+        Raises ValueError if `status` is not one of VALID_HANDOFF_STATUSES
+        (a typo here would otherwise silently return zero rows).
+        """
+        if status is not None and status not in VALID_HANDOFF_STATUSES:
+            raise ValueError(
+                f"status must be one of {sorted(VALID_HANDOFF_STATUSES)}, got {status!r}"
+            )
+        with self._lock:
+            clauses = []
+            params: list = []
+            if status is not None:
+                clauses.append("status = ?")
+                params.append(status)
+            if session_id is not None:
+                clauses.append("session_id = ?")
+                params.append(session_id)
+            if owner is not None:
+                clauses.append("owner = ?")
+                params.append(owner)
+            where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            params.append(limit)
+            sql = f"""
+                SELECT handoff_id, title, status, summary, next_steps, blockers,
+                       owner, session_id, created_at, updated_at
+                FROM memory_handoffs
+                {where}
+                ORDER BY updated_at DESC, handoff_id DESC
+                LIMIT ?
+            """
+            rows = self._conn.execute(sql, params).fetchall()
+            return [self._row_to_dict(r) for r in rows]
+
+    def update_handoff(
+        self,
+        handoff_id: int,
+        *,
+        title: "str | None" = None,
+        status: "str | None" = None,
+        summary: "str | None" = None,
+        next_steps: "str | None" = None,
+        blockers: "str | None" = None,
+        owner: "str | None" = None,
+    ) -> "dict | None":
+        """Partially update an existing handoff by its stable id.
+
+        Only fields explicitly passed (not None) are changed; omitted
+        fields keep their current value. Returns the updated row as a
+        dict, or None if handoff_id does not exist. Raises ValueError for
+        an empty title or an invalid status. handoff_id itself is never
+        reassigned by this call.
+        """
+        if title is not None:
+            title = title.strip()
+            if not title:
+                raise ValueError("title must not be empty")
+        if status is not None and status not in VALID_HANDOFF_STATUSES:
+            raise ValueError(
+                f"status must be one of {sorted(VALID_HANDOFF_STATUSES)}, got {status!r}"
+            )
+
+        with self.transaction():
+            row = self._conn.execute(
+                "SELECT handoff_id FROM memory_handoffs WHERE handoff_id = ?",
+                (handoff_id,),
+            ).fetchone()
+            if row is None:
+                return None
+
+            assignments = ["updated_at = CURRENT_TIMESTAMP"]
+            params: list = []
+            if title is not None:
+                assignments.append("title = ?")
+                params.append(title)
+            if status is not None:
+                assignments.append("status = ?")
+                params.append(status)
+            if summary is not None:
+                assignments.append("summary = ?")
+                params.append(summary)
+            if next_steps is not None:
+                assignments.append("next_steps = ?")
+                params.append(next_steps)
+            if blockers is not None:
+                assignments.append("blockers = ?")
+                params.append(blockers)
+            if owner is not None:
+                assignments.append("owner = ?")
+                params.append(owner)
+            params.append(handoff_id)
+            self._conn.execute(
+                f"UPDATE memory_handoffs SET {', '.join(assignments)} WHERE handoff_id = ?",
+                params,
+            )
+
+        return self.get_handoff(handoff_id)
 
     # ------------------------------------------------------------------
     # Entity helpers

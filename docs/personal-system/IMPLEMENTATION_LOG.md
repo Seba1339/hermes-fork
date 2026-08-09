@@ -908,3 +908,14 @@ code, config, or real data was touched.
 ### Push
 
 Pushed to `origin/feature/personal-system-functional-extraction`.
+
+## Entry 17 — Handoffs persistentes
+
+Se añadió `memory_handoffs` como tabla additive e idempotente en
+`MemoryStore`, con CRUD transaccional y estados válidos (`open`,
+`in_progress`, `blocked`, `done`, `abandoned`). El provider expone el tool
+`memory_handoff` con acciones de crear, obtener, listar y actualizar; cada
+creación puede conservar el `session_id` actual. Los handoffs son estado de
+trabajo mutable, separado de facts y BuJo: no generan tareas, eventos,
+recordatorios ni escrituras fuera de la base configurada por el provider.
+La fase se prueba solamente contra SQLite temporal.

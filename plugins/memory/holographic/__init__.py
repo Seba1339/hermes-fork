@@ -24,7 +24,7 @@ from typing import Any, Dict, List
 
 from agent.memory_provider import MemoryProvider
 from tools.registry import tool_error
-from .store import MemoryStore
+from .store import MemoryStore, VALID_HANDOFF_STATUSES
 from .retrieval import FactRetriever
 from hermes_cli.config import cfg_get
 
@@ -84,6 +84,61 @@ FACT_STORE_SCHEMA = {
             "trust_delta": {"type": "number", "description": "Trust adjustment for 'update'."},
             "min_trust": {"type": "number", "description": "Minimum trust filter (default: 0.3)."},
             "limit": {"type": "integer", "description": "Max results (default: 10)."},
+        },
+        "required": ["action"],
+    },
+}
+
+HANDOFF_SCHEMA = {
+    "name": "memory_handoff",
+    "description": (
+        "Persistent handoffs for work/projects that need to be resumed later "
+        "(e.g. by a future session or another agent). Explicit and separate "
+        "from fact_store — a handoff is mutable work-in-progress state "
+        "(title/status/summary/next_steps/blockers), not a durable fact — "
+        "but it is retrievable across sessions.\n\n"
+        "ACTIONS:\n"
+        "• handoff_create — Start a new resumable handoff (title required).\n"
+        "• handoff_get — Fetch one handoff by handoff_id.\n"
+        "• handoff_list — Browse handoffs, optionally filtered by status/session_id/owner.\n"
+        "• handoff_update — Update status/summary/next_steps/blockers/owner/title "
+        "on an existing handoff by handoff_id.\n\n"
+        "This tool does NOT create BuJo entries, tasks, or reminders — it only "
+        "tracks resumable work state."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["handoff_create", "handoff_get", "handoff_list", "handoff_update"],
+            },
+            "handoff_id": {
+                "type": "integer",
+                "description": "Handoff ID (required for handoff_get/handoff_update).",
+            },
+            "title": {
+                "type": "string",
+                "description": "Short title (required for handoff_create; optional rename for handoff_update).",
+            },
+            "status": {
+                "type": "string",
+                "enum": sorted(VALID_HANDOFF_STATUSES),
+                "description": "Handoff status (default 'open' on handoff_create).",
+            },
+            "summary": {"type": "string", "description": "Current state of the work."},
+            "next_steps": {"type": "string", "description": "What to do when resuming."},
+            "blockers": {"type": "string", "description": "What's blocking progress, if anything."},
+            "owner": {"type": "string", "description": "Optional owner/assignee."},
+            "session_id": {
+                "type": "string",
+                "description": (
+                    "Optional session filter for handoff_list, or an explicit "
+                    "session to stamp on handoff_create. Defaults to the current "
+                    "session on handoff_create if omitted."
+                ),
+            },
+            "limit": {"type": "integer", "description": "Max results for handoff_list (default: 20)."},
         },
         "required": ["action"],
     },
@@ -242,13 +297,15 @@ class HolographicMemoryProvider(MemoryProvider):
         pass
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
-        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA]
+        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA, HANDOFF_SCHEMA]
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
         if tool_name == "fact_store":
             return self._handle_fact_store(args)
         elif tool_name == "fact_feedback":
             return self._handle_fact_feedback(args)
+        elif tool_name == "memory_handoff":
+            return self._handle_memory_handoff(args)
         return tool_error(f"Unknown tool: {tool_name}")
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
@@ -379,6 +436,66 @@ class HolographicMemoryProvider(MemoryProvider):
             return json.dumps(result)
         except KeyError as exc:
             return tool_error(f"Missing required argument: {exc}")
+        except Exception as exc:
+            return tool_error(str(exc))
+
+    def _handle_memory_handoff(self, args: dict) -> str:
+        try:
+            action = args["action"]
+            store = self._store
+            if store is None:
+                return tool_error("memory store not initialized")
+
+            if action == "handoff_create":
+                handoff_id = store.create_handoff(
+                    args["title"],
+                    status=args.get("status", "open"),
+                    summary=args.get("summary", ""),
+                    next_steps=args.get("next_steps", ""),
+                    blockers=args.get("blockers", ""),
+                    owner=args.get("owner"),
+                    session_id=args.get("session_id") or self._session_id,
+                )
+                return json.dumps({"handoff_id": handoff_id, "status": "created"})
+
+            elif action == "handoff_get":
+                handoff_id = int(args["handoff_id"])
+                handoff = store.get_handoff(handoff_id)
+                if handoff is None:
+                    return tool_error(f"handoff_id {handoff_id} not found")
+                return json.dumps({"handoff": handoff})
+
+            elif action == "handoff_list":
+                handoffs = store.list_handoffs(
+                    status=args.get("status"),
+                    session_id=args.get("session_id"),
+                    owner=args.get("owner"),
+                    limit=int(args.get("limit", 20)),
+                )
+                return json.dumps({"handoffs": handoffs, "count": len(handoffs)})
+
+            elif action == "handoff_update":
+                handoff_id = int(args["handoff_id"])
+                updated = store.update_handoff(
+                    handoff_id,
+                    title=args.get("title"),
+                    status=args.get("status"),
+                    summary=args.get("summary"),
+                    next_steps=args.get("next_steps"),
+                    blockers=args.get("blockers"),
+                    owner=args.get("owner"),
+                )
+                if updated is None:
+                    return tool_error(f"handoff_id {handoff_id} not found")
+                return json.dumps({"handoff": updated})
+
+            else:
+                return tool_error(f"Unknown action: {action}")
+
+        except KeyError as exc:
+            return tool_error(f"Missing required argument: {exc}")
+        except ValueError as exc:
+            return tool_error(str(exc))
         except Exception as exc:
             return tool_error(str(exc))
 
