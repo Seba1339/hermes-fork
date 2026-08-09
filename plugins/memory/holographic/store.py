@@ -6,6 +6,7 @@ Single-user Hermes memory store plugin.
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 try:
@@ -160,6 +161,9 @@ class MemoryStore:
         self.default_trust = _clamp_trust(default_trust)
         self.hrr_dim = hrr_dim
         self._hrr_available = hrr._HAS_NUMPY
+        # True while a transaction() block is coordinating a multi-call
+        # atomic batch — see _commit()/transaction() below.
+        self._in_transaction = False
 
         # Acquire (or open) the process-wide shared connection for this DB.
         # resolve() (not just expanduser) so symlinked/relative paths to the
@@ -223,6 +227,63 @@ class MemoryStore:
         self._conn.commit()
 
     # ------------------------------------------------------------------
+    # Batch transactions
+    # ------------------------------------------------------------------
+    #
+    # add_fact/update_fact/remove_fact/record_feedback and their internal
+    # helpers (_resolve_entity, _link_fact_entity, _compute_hrr_vector,
+    # _rebuild_bank) each call self._commit() after their own writes so a
+    # single call is durable the instant it returns (the shared connection
+    # runs isolation_level=None/autocommit — see __init__ above). Calling
+    # several of them in a loop (e.g. a bulk migration) previously committed
+    # each row independently, so a failure partway through a batch left the
+    # earlier rows permanently written with no way to undo them. transaction()
+    # groups a whole batch into one atomic unit: it opens one explicit
+    # BEGIN IMMEDIATE, makes _commit() a no-op for the duration (so nothing
+    # inside the block becomes durable early), and COMMITs everything
+    # together on a clean exit or ROLLBACKs the entire batch — including
+    # already-"committed" earlier rows in the block — if any exception
+    # propagates, whether raised by SQLite or by the caller's own code.
+
+    def _commit(self) -> None:
+        """Commit now, unless a transaction() block is coordinating a batch."""
+        if not self._in_transaction:
+            self._conn.commit()
+
+    @contextmanager
+    def transaction(self):
+        """Run a batch of mutating calls as one atomic unit.
+
+        Usage::
+
+            with store.transaction():
+                for item in items:
+                    store.add_fact(...)
+                    store.update_fact(...)
+
+        If any exception propagates out of the block, every write made
+        inside it (by this call or nested ones) is rolled back and none of
+        it is ever visible to other readers. Reentrant: a transaction()
+        opened while already inside one just joins the outer block — only
+        the outermost call issues BEGIN/COMMIT/ROLLBACK.
+        """
+        with self._lock:
+            if self._in_transaction:
+                yield self
+                return
+            self._conn.execute("BEGIN IMMEDIATE")
+            self._in_transaction = True
+            try:
+                yield self
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+            else:
+                self._conn.execute("COMMIT")
+            finally:
+                self._in_transaction = False
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -267,7 +328,7 @@ class MemoryStore:
                     """,
                     (content, category, tags, self.default_trust, session_id, fact_type, expires_at),
                 )
-                self._conn.commit()
+                self._commit()
                 fact_id: int = cur.lastrowid  # type: ignore[assignment]
             except sqlite3.IntegrityError:
                 # Duplicate content — return existing id
@@ -341,7 +402,7 @@ class MemoryStore:
                     f"UPDATE facts SET retrieval_count = retrieval_count + 1 WHERE fact_id IN ({placeholders})",
                     ids,
                 )
-                self._conn.commit()
+                self._commit()
 
             return results
 
@@ -386,7 +447,7 @@ class MemoryStore:
                 f"UPDATE facts SET {', '.join(assignments)} WHERE fact_id = ?",
                 params,
             )
-            self._conn.commit()
+            self._commit()
 
             # If content changed, re-extract entities
             if content is not None:
@@ -396,7 +457,7 @@ class MemoryStore:
                 for name in self._extract_entities(content):
                     entity_id = self._resolve_entity(name)
                     self._link_fact_entity(fact_id, entity_id)
-                self._conn.commit()
+                self._commit()
 
             # Recompute HRR vector if content changed
             if content is not None:
@@ -422,7 +483,7 @@ class MemoryStore:
                 "DELETE FROM fact_entities WHERE fact_id = ?", (fact_id,)
             )
             self._conn.execute("DELETE FROM facts WHERE fact_id = ?", (fact_id,))
-            self._conn.commit()
+            self._commit()
             self._rebuild_bank(row["category"])
             return True
 
@@ -488,7 +549,7 @@ class MemoryStore:
                 """,
                 (new_trust, helpful_increment, fact_id),
             )
-            self._conn.commit()
+            self._commit()
 
             return {
                 "fact_id":      fact_id,
@@ -638,7 +699,7 @@ class MemoryStore:
                 self._conn.execute(
                     "DELETE FROM fact_entities WHERE fact_id = ?", (fact_id,)
                 )
-                self._conn.commit()
+                self._commit()
                 for name in self._extract_entities(content):
                     entity_id = self._resolve_entity(name)
                     self._link_fact_entity(fact_id, entity_id)
@@ -792,7 +853,7 @@ class MemoryStore:
         cur = self._conn.execute(
             "INSERT INTO entities (name) VALUES (?)", (name,)
         )
-        self._conn.commit()
+        self._commit()
         return int(cur.lastrowid)  # type: ignore[return-value]
 
     def _link_fact_entity(self, fact_id: int, entity_id: int) -> None:
@@ -804,7 +865,7 @@ class MemoryStore:
             """,
             (fact_id, entity_id),
         )
-        self._conn.commit()
+        self._commit()
 
     def _compute_hrr_vector(self, fact_id: int, content: str) -> None:
         """Compute and store HRR vector for a fact. No-op if numpy unavailable."""
@@ -828,7 +889,7 @@ class MemoryStore:
                 "UPDATE facts SET hrr_vector = ? WHERE fact_id = ?",
                 (hrr.phases_to_bytes(vector), fact_id),
             )
-            self._conn.commit()
+            self._commit()
 
     def _rebuild_bank(self, category: str) -> None:
         """Full rebuild of a category's memory bank from all its fact vectors."""
@@ -844,7 +905,7 @@ class MemoryStore:
 
             if not rows:
                 self._conn.execute("DELETE FROM memory_banks WHERE bank_name = ?", (bank_name,))
-                self._conn.commit()
+                self._commit()
                 return
 
             vectors = [hrr.bytes_to_phases(row["hrr_vector"]) for row in rows]
@@ -866,7 +927,7 @@ class MemoryStore:
                 """,
                 (bank_name, hrr.phases_to_bytes(bank_vector), self.hrr_dim, fact_count),
             )
-            self._conn.commit()
+            self._commit()
 
     def rebuild_all_vectors(self, dim: int | None = None) -> int:
         """Recompute all HRR vectors + banks from text. For recovery/migration.

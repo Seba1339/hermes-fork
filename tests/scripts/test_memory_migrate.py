@@ -244,6 +244,55 @@ class TestApplyMigratesRows:
         assert len(target_backups) == 1
 
 
+class TestBatchAtomicity:
+    def test_mid_batch_failure_rolls_back_entire_batch(self, tmp_path, capsys, monkeypatch):
+        """A failure on an intermediate row must not leave earlier rows in --target.
+
+        Simulates apply_migration's internal MemoryStore.add_fact raising
+        partway through the batch (third row) and asserts the target ends up
+        with zero facts — not the two rows that "succeeded" before the
+        failure — since the whole batch runs inside one
+        MemoryStore.transaction().
+        """
+        source_path = tmp_path / "source.db"
+        _make_source_db(
+            source_path,
+            [
+                ("First fact", "habits", 0.9, "manual", None),
+                ("Second fact", "habits", 0.5, "manual", None),
+                ("Third fact explodes", "habits", 0.5, "manual", None),
+            ],
+        )
+        target = tmp_path / "target.db"
+        backup_dir = tmp_path / "backups"
+
+        original_add_fact = MemoryStore.add_fact
+
+        def _flaky_add_fact(self, content, *args, **kwargs):
+            if content == "Third fact explodes":
+                raise RuntimeError("simulated failure on intermediate row")
+            return original_add_fact(self, content, *args, **kwargs)
+
+        monkeypatch.setattr(MemoryStore, "add_fact", _flaky_add_fact)
+
+        rc = memory_migrate.main(
+            [
+                "--source", str(source_path),
+                "--target", str(target),
+                "--apply",
+                "--backup-dir", str(backup_dir),
+            ]
+        )
+        captured = capsys.readouterr()
+
+        assert rc == 1
+        assert "migration failed" in captured.err
+
+        # Target file exists (MemoryStore.__init__ creates the schema) but
+        # none of the batch's earlier inserts may have survived the rollback.
+        assert _read_target_facts(target) == []
+
+
 class TestDedupAndIdempotency:
     def test_second_apply_run_is_idempotent(self, tmp_path, capsys):
         source_path = tmp_path / "source.db"

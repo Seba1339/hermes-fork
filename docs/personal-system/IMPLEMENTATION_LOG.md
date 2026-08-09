@@ -659,3 +659,10 @@ was touched.
 ### Push
 
 Pushed to `origin/feature/personal-system-memory-governance-cli`.
+
+## Entry 13 — Atomicidad de la migración por lote
+
+`MemoryStore.transaction()` agrupa la aplicación de una migración completa y
+realiza rollback total si falla una inserción o actualización intermedia.
+La corrección fue validada con un test de fallo parcial y no implica ninguna
+migración real ni modificación de bases de producción.

@@ -325,3 +325,10 @@ and `--apply` against such a path additionally requires
 (`tests/scripts/test_memory_governance.py`; 81/81 across the audit and
 governance suites combined); no real data has been touched — see
 `IMPLEMENTATION_LOG.md` for details.
+
+La migración por lote (`scripts/memory_migrate.py`) ahora usa
+`MemoryStore.transaction()` para envolver todo el batch: si falla algo a
+mitad de camino, se hace rollback total y ninguna fila queda escrita a
+medias. Suite relevante verificada en **54/54**. Esto no implica una
+migración real; sigue siendo una herramienta de prueba/dry-run sobre
+rutas no reales.

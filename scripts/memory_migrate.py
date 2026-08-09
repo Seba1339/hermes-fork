@@ -297,26 +297,30 @@ def apply_migration(plan: MigrationPlan, target: Path) -> dict:
     """Write plan.to_insert into --target via MemoryStore(db_path=target).
 
     Uses an explicit db_path throughout — never the HERMES_HOME-derived
-    default — and never deletes or modifies --source.
+    default — and never deletes or modifies --source. The whole batch runs
+    inside one MemoryStore.transaction(): if any row raises partway through,
+    every insert made earlier in this call is rolled back too, instead of
+    leaving --target with a partially-migrated batch.
     """
     from plugins.memory.holographic.store import MemoryStore
 
     store = MemoryStore(db_path=target)
     try:
         inserted = 0
-        for fact in plan.to_insert:
-            fact_id = store.add_fact(
-                fact.content,
-                category=fact.category,
-                tags="",
-                session_id=None,
-                fact_type=fact.fact_type,
-                expires_at=fact.expires_at,
-            )
-            delta = fact.trust_score - store.default_trust
-            if delta:
-                store.update_fact(fact_id, trust_delta=delta)
-            inserted += 1
+        with store.transaction():
+            for fact in plan.to_insert:
+                fact_id = store.add_fact(
+                    fact.content,
+                    category=fact.category,
+                    tags="",
+                    session_id=None,
+                    fact_type=fact.fact_type,
+                    expires_at=fact.expires_at,
+                )
+                delta = fact.trust_score - store.default_trust
+                if delta:
+                    store.update_fact(fact_id, trust_delta=delta)
+                inserted += 1
         return {"inserted": inserted}
     finally:
         store.close()
