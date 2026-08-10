@@ -5191,7 +5191,7 @@ class APIServerAdapter(BasePlatformAdapter):
             meta = metadata or {}
             if meta.get("bujo_write") is not True:
                 logger.info("[api_server] Skipping implicit BuJo capture for cron output")
-                return SendResult(success=False, error="HTTP request/response is not supported for outbound send")
+                return SendResult(success=True)
             job_name = meta.get("job_name", meta.get("name", "Cron"))
             target_date = meta.get("date", datetime.now().strftime("%Y-%m-%d"))
             section = meta.get("section", "reportes")

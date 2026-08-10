@@ -2821,12 +2821,12 @@ class TestMultipleSystemMessages:
 
 class TestSendMethod:
     @pytest.mark.asyncio
-    async def test_send_returns_not_supported(self):
+    async def test_send_without_bujo_opt_in_is_successful_noop(self):
         config = PlatformConfig(enabled=True)
         adapter = APIServerAdapter(config)
         result = await adapter.send("chat1", "hello")
-        assert result.success is False
-        assert "HTTP request/response" in result.error
+        assert result.success is True
+        assert result.error is None
 
 
 # ---------------------------------------------------------------------------
