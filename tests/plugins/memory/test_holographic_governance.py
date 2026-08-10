@@ -276,6 +276,8 @@ class TestUpdateFactAudited:
     def test_update_moves_between_category_banks(self, tmp_path):
         store = MemoryStore(tmp_path / "db.sqlite")
         try:
+            if not store._hrr_available:
+                pytest.skip("hrr optional dependency is not installed")
             fact_id = store.add_fact("Bank move fact", category="general")
             store.update_fact_audited(fact_id, reason="move category", category="project")
 
