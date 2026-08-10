@@ -18,13 +18,15 @@ El campo `runtime_identity` contiene:
 | `structure_id` | Línea funcional integrada; actualmente `personal-system-memory`. |
 | `structure_version` | Versión del contrato de la estructura integrada. |
 | `integration_commit` | Commit exacto que identifica el código integrado. |
+| `checkout_commit` | Commit exacto del checkout fuente que está ejecutando el proceso; puede ser `null` fuera de un checkout Git. |
 | `channel` | Canal de publicación; actualmente `integration`. |
 | `package_version` | Versión de `hermes-agent` obtenida desde metadata instalada. |
 | `source_version` | `hermes_cli.__version__` del código fuente cargado. |
 
 `package_version` y `source_version` pueden diferir: el primero identifica el
-paquete instalado y el segundo el checkout fuente. No deben interpretarse como
-sustitutos del `integration_commit`.
+paquete instalado y el segundo la versión declarada por el código fuente.
+`checkout_commit` identifica el checkout Git real en ejecución. Ninguno de
+ellos debe interpretarse como sustituto del `integration_commit`.
 
 ## Identidad actual
 

@@ -19,6 +19,8 @@ package. Bump `STRUCTURE_VERSION` and update `INTEGRATION_COMMIT` when the
 
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
 from typing import Any, Dict, Optional
 
 STRUCTURE_ID = "personal-system-memory"
@@ -55,6 +57,23 @@ def get_source_version() -> Optional[str]:
         return None
 
 
+def get_checkout_commit() -> Optional[str]:
+    """Return the exact source checkout commit, when Git metadata is present."""
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+            check=True,
+        )
+        commit = result.stdout.strip()
+        return commit or None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
 def get_runtime_identity() -> Dict[str, Any]:
     """Return the full runtime identity record.
 
@@ -65,6 +84,7 @@ def get_runtime_identity() -> Dict[str, Any]:
         "structure_id": STRUCTURE_ID,
         "structure_version": STRUCTURE_VERSION,
         "integration_commit": INTEGRATION_COMMIT,
+        "checkout_commit": get_checkout_commit(),
         "channel": CHANNEL,
         "package_version": get_package_version(),
         "source_version": get_source_version(),
