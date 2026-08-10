@@ -4,10 +4,12 @@
 > **Scope:** The personal deployment layered on top of this Hermes fork — the
 > "Enhanced" gateway, the BuJo journal, the perspective/model routing tools,
 > and the proposed unified memory system.
-> **Status:** Phase 1 — foundation (documentation, invariant tests,
-> no behavior changes). See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)
-> for exactly what changed and when.
-> **Last updated:** 2026-08-08
+> **Status:** The personal-system integration is implemented and merged into
+> `main`. The active gateway reports its exact checkout commit through
+> `runtime_identity`. See [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) and
+> [ROADMAP.md](ROADMAP.md) for the implementation history and remaining
+> observational work.
+> **Last updated:** 2026-08-10
 
 ## Why this directory exists
 
@@ -39,6 +41,7 @@ in-repo caller — it's invoked by a live systemd service. See
 | [EXTERNAL_AGENT_PATTERNS.md](EXTERNAL_AGENT_PATTERNS.md) | Benchmark of OpenClaw, OpenHands, Letta, Browser Use, Goose, OpenAI Agents SDK, Google ADK, and LangGraph — which patterns are concretely applicable here and which are not, and why. |
 | [ROADMAP.md](ROADMAP.md) | Phased plan for the memory/collaboration system, building on the existing `memoria_activa_architecture.md` proposal. Phase 1 (this phase) is documentation + tests only. |
 | [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) | Append-only log: what changed, why, how it was verified, and how to roll it back. One entry per phase. |
+| [decisions/0001-retain-legacy-memory-readonly.md](decisions/0001-retain-legacy-memory-readonly.md) | Decision to preserve the legacy memory database as a read-only historical backup. |
 
 ## Related documents outside this directory
 
