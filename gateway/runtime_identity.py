@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 
 STRUCTURE_ID = "personal-system-memory"
 STRUCTURE_VERSION = 1
-INTEGRATION_COMMIT = "a57f4b674c4b0d4d34ee6e06b214f61364f6d20e"
+INTEGRATION_COMMIT = "422be8696f9b7a6247d9b23209f263a50ce96343"
 CHANNEL = "integration"
 
 

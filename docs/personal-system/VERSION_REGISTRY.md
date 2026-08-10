@@ -30,7 +30,7 @@ sustitutos del `integration_commit`.
 
 - `structure_id`: `personal-system-memory`
 - `structure_version`: `1`
-- `integration_commit`: `a57f4b674c4b0d4d34ee6e06b214f61364f6d20e`
+- `integration_commit`: `422be8696f9b7a6247d9b23209f263a50ce96343`
 - `channel`: `integration`
 
 Cuando la integración avance, se actualiza `INTEGRATION_COMMIT`; se incrementa

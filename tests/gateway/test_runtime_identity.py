@@ -6,7 +6,7 @@ def test_runtime_identity_has_stable_structure_fields():
 
     assert identity["structure_id"] == "personal-system-memory"
     assert identity["structure_version"] == 1
-    assert identity["integration_commit"] == "a57f4b674c4b0d4d34ee6e06b214f61364f6d20e"
+    assert identity["integration_commit"] == "422be8696f9b7a6247d9b23209f263a50ce96343"
     assert identity["channel"] == "integration"
     assert "package_version" in identity
     assert "source_version" in identity
