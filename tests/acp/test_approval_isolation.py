@@ -15,6 +15,26 @@ Both fixed together by:
 
 import threading
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolate_approval_policy_state():
+    """Keep approval allowlists from earlier tests out of callback assertions.
+
+    The test module intentionally exercises shared approval machinery, but the
+    policy cache is process-global. A prior test can approve the generic
+    ``recursive delete`` pattern and make the later interactive-routing tests
+    return before invoking their callback. Clear only this test module's
+    temporary state before and after each case.
+    """
+    from tools import approval
+
+    approval._session_approved.clear()
+    approval._permanent_approved.clear()
+    yield
+    approval._session_approved.clear()
+    approval._permanent_approved.clear()
 
 
 class TestThreadLocalApprovalCallback:

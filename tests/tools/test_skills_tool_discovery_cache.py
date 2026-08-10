@@ -68,9 +68,19 @@ def test_nested_category_skill_add_invalidates(tmp_path):
     # (guards against filesystems bumping the parent too).
     root = tmp_path / "skills"
     root_stat = root.stat()
+    cat_a = root / "cat-a"
+    cat_a_stat = cat_a.stat()
     _write_skill(tmp_path, "cat-a", "skill-two")
     import os
     os.utime(root, (root_stat.st_atime, root_stat.st_mtime))
+    # Force cat-a's own mtime strictly forward: on hosts with coarse mtime
+    # resolution, the skill-one and skill-two writes can land on the same
+    # on-disk timestamp, which would make this test pass by accident on
+    # fine-grained clocks but flake/fail here without actually exercising
+    # the category-child signature this test targets.
+    cat_a_stat_after = cat_a.stat()
+    if cat_a_stat_after.st_mtime_ns <= cat_a_stat.st_mtime_ns:
+        os.utime(cat_a, ns=(cat_a_stat_after.st_atime_ns, cat_a_stat.st_mtime_ns + 1_000_000))
 
     names = sorted(s["name"] for s in st._find_all_skills())
     assert names == ["skill-one", "skill-two"], (

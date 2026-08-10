@@ -1043,10 +1043,18 @@ class TestWorktreeLockReaping:
             cwd=repo, capture_output=True,
         )
         if pid is not None:
-            subprocess.run(
+            lock = subprocess.run(
                 ["git", "worktree", "lock", "--reason", f"hermes pid={pid}", str(p)],
-                cwd=repo, capture_output=True,
+                cwd=repo, capture_output=True, text=True,
             )
+            if lock.returncode != 0 or not any(
+                line == "locked" or line.startswith("locked ")
+                for line in subprocess.run(
+                    ["git", "worktree", "list", "--porcelain"],
+                    cwd=repo, capture_output=True, text=True,
+                ).stdout.splitlines()
+            ):
+                pytest.skip("installed Git cannot materialize worktree lock reasons")
         if unpushed:
             (p / "work.txt").write_text("x")
             subprocess.run(["git", "add", "work.txt"], cwd=p, capture_output=True)
@@ -1111,10 +1119,18 @@ class TestWorktreeLockPredicate:
             ["git", "worktree", "add", str(p), "-b", f"hermes/{name}", "HEAD"],
             cwd=repo, capture_output=True,
         )
-        subprocess.run(
+        lock = subprocess.run(
             ["git", "worktree", "lock", "--reason", reason, str(p)],
-            cwd=repo, capture_output=True,
+            cwd=repo, capture_output=True, text=True,
         )
+        if lock.returncode != 0 or not any(
+            line == "locked" or line.startswith("locked ")
+            for line in subprocess.run(
+                ["git", "worktree", "list", "--porcelain"],
+                cwd=repo, capture_output=True, text=True,
+            ).stdout.splitlines()
+        ):
+            pytest.skip("installed Git cannot materialize worktree lock reasons")
         return p
 
     def test_unlocked_returns_none(self, git_repo):

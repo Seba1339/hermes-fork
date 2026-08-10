@@ -27,8 +27,24 @@ def _git_init(path):
     # repo with no code no longer flips into the coding posture (see
     # _detect_profile_name / _has_code_files), so "a code repo" needs code.
     (Path(path) / "main.py").write_text("print('hi')\n")
+    git = shutil.which("git")
+    init = subprocess.run(
+        [git, "-C", str(path), "init", "-q", "-b", "main"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if init.returncode != 0:
+        # Git <2.28 does not support `git init -b`; create the repository
+        # first and set the initial branch using the older portable command.
+        assert "unknown switch `b'" in init.stderr or init.returncode == 129
+        subprocess.run([git, "-C", str(path), "init", "-q"], check=True, env=env)
+        subprocess.run(
+            [git, "-C", str(path), "symbolic-ref", "HEAD", "refs/heads/main"],
+            check=True,
+            env=env,
+        )
     for args in (
-        ["init", "-q", "-b", "main"],
         ["add", "-A"],
         ["commit", "-q", "-m", "init commit"],
     ):
@@ -62,8 +78,23 @@ class TestIsCodingContext:
             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "HOME": str(tmp_path),
         }
         (tmp_path / "notes.md").write_text("# my novel\n")
-        for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "notes"]):
-            subprocess.run([shutil.which("git"), "-C", str(tmp_path), *args], check=True, env=env)
+        git = shutil.which("git")
+        init = subprocess.run(
+            [git, "-C", str(tmp_path), "init", "-q", "-b", "main"],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if init.returncode != 0:
+            assert init.returncode == 129
+            subprocess.run([git, "-C", str(tmp_path), "init", "-q"], check=True, env=env)
+            subprocess.run(
+                [git, "-C", str(tmp_path), "symbolic-ref", "HEAD", "refs/heads/main"],
+                check=True,
+                env=env,
+            )
+        for args in (["add", "-A"], ["commit", "-q", "-m", "notes"]):
+            subprocess.run([git, "-C", str(tmp_path), *args], check=True, env=env)
 
         assert cc.is_coding_context(platform="cli", cwd=tmp_path, config=cfg) is False
         # …but adding a manifest or source file makes it a code workspace.
