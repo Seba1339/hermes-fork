@@ -167,7 +167,13 @@ def test_skill_config_raw_cache_invalidates_on_config_edit(tmp_path, monkeypatch
 
     config_path.write_text("skills:\n  disabled: [new-skill]\n", encoding="utf-8")
     import os
-    os.utime(config_path, None)
+    # Force a strictly newer mtime rather than trusting os.utime(path, None) to
+    # advance the clock: on hosts with coarse mtime resolution (some cloud VM
+    # clocksources tick in ~ms increments), two writes microseconds apart can
+    # keep the same on-disk mtime, and "old-skill"/"new-skill" are also the
+    # same byte length, so the mtime+size cache key wouldn't change either.
+    stat_before = config_path.stat()
+    os.utime(config_path, ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns + 1_000_000))
 
     assert get_disabled_skill_names() == {"new-skill"}
 

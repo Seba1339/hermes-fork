@@ -732,7 +732,7 @@ def _build_embedding_cache():
     # Try loading cache
     if os.path.exists(_EMBEDDING_CACHE):
         try:
-            with open(_EMBEDDING_CACHE) as f:
+            with open(_EMBEDDING_CACHE, encoding="utf-8") as f:
                 cached = json.load(f)
             # Check if cache is still valid (same skills)
             if set(cached.get("skills", {}).keys()) == set(descs.keys()):
@@ -757,7 +757,7 @@ def _build_embedding_cache():
     
     # Cache to disk
     os.makedirs(os.path.dirname(_EMBEDDING_CACHE), exist_ok=True)
-    with open(_EMBEDDING_CACHE, "w") as f:
+    with open(_EMBEDDING_CACHE, "w", encoding="utf-8") as f:
         json.dump({"skills": _SKILL_EMBEDDINGS}, f)
 
 

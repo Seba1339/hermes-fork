@@ -1450,7 +1450,20 @@ def fetch_openrouter_models(
         remote = get_curated_openrouter_models()
     except Exception:
         remote = None
-    fallback = list(remote) if remote else list(OPENROUTER_MODELS)
+    if remote:
+        remote_by_id = {mid: desc for mid, desc in remote}
+        local_ids = {mid for mid, _ in OPENROUTER_MODELS}
+        fallback = [
+            (mid, remote_by_id.get(mid, desc))
+            for mid, desc in OPENROUTER_MODELS
+        ]
+        fallback.extend(
+            (mid, desc)
+            for mid, desc in remote
+            if mid not in local_ids and not (mid.endswith(":free") and mid[:-5] in local_ids)
+        )
+    else:
+        fallback = list(OPENROUTER_MODELS)
     preferred_ids = [mid for mid, _ in fallback]
 
     try:
@@ -1479,7 +1492,11 @@ def fetch_openrouter_models(
     curated: list[tuple[str, str]] = []
     silent_default = get_preferred_silent_default_model("openrouter")
     for preferred_id in preferred_ids:
-        live_item = live_by_id.get(preferred_id)
+        effective_id = preferred_id
+        live_item = live_by_id.get(effective_id)
+        if live_item is None and f"{preferred_id}:free" in live_by_id:
+            effective_id = f"{preferred_id}:free"
+            live_item = live_by_id[effective_id]
         if live_item is None:
             continue
         # Hide models that don't advertise tool-calling support — hermes-agent
@@ -1493,7 +1510,9 @@ def fetch_openrouter_models(
             desc = "default"
         else:
             desc = "free" if _openrouter_model_is_free(live_item.get("pricing")) else ""
-        curated.append((preferred_id, desc))
+        if any(mid == effective_id for mid, _ in curated):
+            continue
+        curated.append((effective_id, desc))
 
     if not curated:
         return list(_openrouter_catalog_cache or fallback)

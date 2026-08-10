@@ -30,12 +30,45 @@ def kanban_home(tmp_path, monkeypatch):
 
 def _init_git_repo(repo: Path) -> None:
     repo.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True, text=True)
+    init = subprocess.run(
+        ["git", "init", "-b", "main", str(repo)],
+        capture_output=True,
+        text=True,
+    )
+    if init.returncode != 0:
+        assert "unknown switch `b'" in init.stderr or init.returncode == 129
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "symbolic-ref", "HEAD", "refs/heads/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
     subprocess.run(["git", "-C", str(repo), "config", "user.email", "kanban@example.com"], check=True, capture_output=True, text=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.name", "Kanban Test"], check=True, capture_output=True, text=True)
     (repo / "README.md").write_text("hello\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True, capture_output=True, text=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True, text=True)
+
+
+def _git_common_dir(path: Path) -> str:
+    """Return an absolute common Git dir on old and new Git versions."""
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and not result.stdout.lstrip().startswith("--path-format="):
+        return result.stdout.strip()
+    assert result.returncode == 129 or "path-format" in result.stdout or "path-format" in result.stderr
+    raw = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--git-common-dir"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return str((path / raw).resolve())
 
 
 # ---------------------------------------------------------------------------
@@ -2140,18 +2173,8 @@ def test_worktree_workspace_repo_root_anchor_materializes_linked_worktree(kanban
     expected = repo / ".worktrees" / t
     assert ws == expected
     assert ws.exists()
-    repo_common = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    ws_common = subprocess.run(
-        ["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    repo_common = _git_common_dir(repo)
+    ws_common = _git_common_dir(ws)
     assert ws_common == repo_common
     listed = subprocess.run(
         ["git", "-C", str(repo), "worktree", "list", "--porcelain"],
@@ -2224,18 +2247,8 @@ def test_worktree_workspace_explicit_target_materializes_linked_worktree(kanban_
 
     assert ws == target
     assert ws.exists()
-    repo_common = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    ws_common = subprocess.run(
-        ["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    repo_common = _git_common_dir(repo)
+    ws_common = _git_common_dir(ws)
     assert ws_common == repo_common
     listed = subprocess.run(
         ["git", "-C", str(repo), "worktree", "list", "--porcelain"],

@@ -16015,7 +16015,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         "honcho.runtime_peer_prefix",
         "honcho.user_peer_aliases",
     )
-    _HONCHO_CACHE_BUSTING_MEMO: dict[tuple[str, int | None], dict[str, Any]] = {}
+    _HONCHO_CACHE_BUSTING_MEMO: dict[tuple[str, int | None, int | None], dict[str, Any]] = {}
 
     @classmethod
     def _empty_honcho_cache_busting_config(cls) -> dict[str, Any]:
@@ -16023,16 +16023,25 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
 
     @classmethod
     def _extract_honcho_cache_busting_config(cls) -> dict[str, Any]:
-        """Extract Honcho identity keys, memoized by honcho.json mtime."""
+        """Extract Honcho identity keys, memoized by honcho.json mtime+size."""
         try:
             from plugins.memory.honcho.client import HonchoClientConfig, resolve_config_path
 
             path = resolve_config_path()
             try:
-                mtime_ns = path.stat().st_mtime_ns
+                stat = path.stat()
+                mtime_ns: int | None = stat.st_mtime_ns
+                size: int | None = stat.st_size
             except OSError:
                 mtime_ns = None
-            memo_key = (str(path), mtime_ns)
+                size = None
+            # mtime_ns alone is not enough: on filesystems/clocks with coarse
+            # mtime resolution, two edits in quick succession can land on the
+            # same mtime and silently serve a stale identity config. Pairing
+            # with size (the same convention used elsewhere in this codebase,
+            # e.g. hermes_cli/config.py, agent/skill_utils.py) catches any
+            # edit that changes the file's length.
+            memo_key = (str(path), mtime_ns, size)
             cached = cls._HONCHO_CACHE_BUSTING_MEMO.get(memo_key)
             if cached is not None:
                 return dict(cached)

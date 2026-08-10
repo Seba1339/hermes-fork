@@ -13,6 +13,7 @@ MemoryManager._strip_skill_scaffolding.
 from agent.memory_manager import MemoryManager
 from agent.memory_provider import MemoryProvider
 from agent.skill_commands import extract_user_instruction_from_skill_message
+from tests.agent.test_memory_provider import FakeMemoryProvider
 
 
 _SINGLE_SKILL_TURN = (
@@ -159,3 +160,46 @@ class TestMemoryManagerStripsScaffolding:
         mgr.sync_all("what's the weather", "Sunny.")
         mgr.flush_pending(timeout=5.0)
         assert provider.synced == ["what's the weather"]
+
+
+class TestPrefetchAllStripsAndMergesWithoutTouchingSystemPrompt:
+    """Phase 4-verificación: prefetch_all() on a skill-scaffolded turn.
+
+    Confirms, in one place, the three properties Fase 4 needs verified:
+    - skill scaffolding is stripped before providers see the query (shared
+      with sync_all/queue_prefetch_all, exercised above);
+    - only non-empty provider results are joined (an empty provider's ""
+      contributes nothing, matching the join behavior already covered by
+      TestMemoryManager.test_prefetch_skips_empty in test_memory_provider.py);
+    - build_system_prompt() output is unaffected by a prefetch_all() call —
+      prefetch is a separate, per-turn channel from the static system-prompt
+      block, so calling one must never mutate what the other returns.
+
+    Uses FakeMemoryProvider (defined in test_memory_provider.py) rather than
+    a new fake, and no real memory backend — pure in-repo MemoryManager
+    plumbing.
+    """
+
+    def test_strips_scaffolding_joins_nonempty_only_leaves_system_prompt_untouched(self):
+        mgr = MemoryManager()
+        empty_provider = FakeMemoryProvider("builtin")
+        empty_provider._prompt_block = "Builtin static block"
+        empty_provider._prefetch_result = ""
+        content_provider = FakeMemoryProvider("external")
+        content_provider._prompt_block = "External static block"
+        content_provider._prefetch_result = "## Holographic Memory\n- [0.8] relevant fact"
+        mgr.add_provider(empty_provider)
+        mgr.add_provider(content_provider)
+
+        prompt_before = mgr.build_system_prompt()
+
+        result = mgr.prefetch_all(_SINGLE_SKILL_TURN)
+
+        assert result == "## Holographic Memory\n- [0.8] relevant fact"
+        assert empty_provider.prefetch_queries == ["make a skill for release triage"]
+        assert content_provider.prefetch_queries == ["make a skill for release triage"]
+
+        prompt_after = mgr.build_system_prompt()
+        assert prompt_after == prompt_before
+        assert "Builtin static block" in prompt_after
+        assert "External static block" in prompt_after

@@ -157,6 +157,11 @@ def common_repo_root(cwd: str) -> str:
 
     def _probe() -> str:
         gitdir = run_git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        # Git <2.31 accepts the unknown option as an argument and may echo it
+        # with a zero exit status. Never treat that diagnostic as a filesystem
+        # path; fall back to the portable repository-root probe.
+        if gitdir and gitdir.lstrip().startswith("--path-format="):
+            return repo_root(cwd)
         if gitdir:
             gitdir = os.path.realpath(gitdir)
             if os.path.basename(gitdir) == ".git":

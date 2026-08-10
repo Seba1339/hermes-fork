@@ -380,6 +380,12 @@ def _split_tool_diagnostics(output: str) -> tuple[str, str]:
         if stripped.startswith("rg: ") or stripped.startswith("grep: "):
             diagnostics.append(line)
             continue
+        # Some rg versions prefix filesystem diagnostics with the path rather
+        # than `rg:` (for example `locked.txt: Permission denied`). They are
+        # diagnostics, not files-only results.
+        if re.search(r":\s+Permission denied(?:\s+\(os error \d+\))?\s*$", line):
+            diagnostics.append(line)
+            continue
         # Otherwise classify by output shape. rg's regex-parse-error block
         # also emits an indented caret line and a trailing "error: ..." line
         # with no tool prefix; neither matches a search-output shape, so they
@@ -771,7 +777,11 @@ def _is_line_oriented_newline_error(error: Optional[str]) -> bool:
     """Return True for rg's hard error when multiline mode is required."""
     if not error:
         return False
-    return "literal \"\\n\" is not allowed" in error and "--multiline" in error
+    return (
+        "literal" in error
+        and "not allowed in a regex" in error
+        and "--multiline" in error
+    )
 
 
 def _maybe_warn_line_oriented_newline_pattern(result: SearchResult, pattern: str) -> SearchResult:
@@ -788,6 +798,19 @@ def _maybe_warn_line_oriented_newline_pattern(result: SearchResult, pattern: str
         "lines, or escape as `\\\\n` when searching for a literal backslash+n."
     )
     return result
+
+
+def _normalize_search_result(method):
+    """Normalize direct backend calls as well as public content searches."""
+    from functools import wraps
+
+    @wraps(method)
+    def wrapped(self, pattern, *args, **kwargs):
+        return _maybe_warn_line_oriented_newline_pattern(
+            method(self, pattern, *args, **kwargs), pattern
+        )
+
+    return wrapped
 
 
 class ShellFileOperations(FileOperations):
@@ -2264,6 +2287,7 @@ class ShellFileOperations(FileOperations):
 
         return _maybe_warn_line_oriented_newline_pattern(result, pattern)
     
+    @_normalize_search_result
     def _search_with_rg(self, pattern: str, path: str, file_glob: Optional[str],
                         limit: int, offset: int, output_mode: str, context: int) -> SearchResult:
         """Search using ripgrep."""
@@ -2390,6 +2414,7 @@ class ShellFileOperations(FileOperations):
                 limit_reason=limit_reason,
             )
     
+    @_normalize_search_result
     def _search_with_grep(self, pattern: str, path: str, file_glob: Optional[str],
                           limit: int, offset: int, output_mode: str, context: int) -> SearchResult:
         """Fallback search using grep."""

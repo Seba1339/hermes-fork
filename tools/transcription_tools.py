@@ -28,10 +28,12 @@ Usage::
 """
 
 import logging
+import importlib.abc
 import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -1118,7 +1120,38 @@ def _load_local_whisper_model(model_name: str):
     We try ``auto`` first (fast CUDA path when it works), and on any CUDA
     library load failure fall back to CPU + int8.
     """
-    from faster_whisper import WhisperModel
+    # CTranslate2 imports torch for optional model-conversion helpers. On
+    # CPU-only hosts, a CUDA-enabled torch wheel can fail during import before
+    # faster-whisper gets a chance to select CPU. Temporarily make torch look
+    # unavailable so CTranslate2 takes its supported optional-dependency path.
+    # Do this locally instead of uninstalling torch, which other Hermes
+    # features (for example embeddings) may legitimately use.
+    torch_blocker = None
+    try:
+        from faster_whisper import WhisperModel
+    except Exception as import_exc:
+        if not _looks_like_cuda_lib_error(import_exc):
+            raise
+
+        class _BlockTorch(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "torch" or fullname.startswith("torch."):
+                    raise ImportError("optional torch disabled for CPU faster-whisper")
+                return None
+
+        torch_blocker = _BlockTorch()
+        sys.meta_path.insert(0, torch_blocker)
+        for module_name in list(sys.modules):
+            if module_name == "torch" or module_name.startswith("torch."):
+                sys.modules.pop(module_name, None)
+            elif module_name == "ctranslate2" or module_name.startswith("ctranslate2."):
+                sys.modules.pop(module_name, None)
+            elif module_name == "faster_whisper" or module_name.startswith("faster_whisper."):
+                sys.modules.pop(module_name, None)
+        try:
+            from faster_whisper import WhisperModel
+        finally:
+            sys.meta_path.remove(torch_blocker)
     try:
         return WhisperModel(model_name, device="auto", compute_type="auto")
     except Exception as exc:

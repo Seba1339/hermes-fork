@@ -376,6 +376,68 @@ def _session_chat_user_message(body: Dict[str, Any], *, param: str = "message") 
         return None, _multimodal_validation_error(exc, param=param)
 
 
+# Cron output noise lines stripped by ``_clean_cron_output`` before a BuJo
+# entry is built. Kept as a module-level constant (rather than inline in the
+# function) so it's independently visible/patchable in tests.
+_CRON_NOISE_PATTERNS = [
+    r'^\[Cron\]$',
+    r'^Cronjob Response:',
+    r'^\(job_id:',
+    r'^─+$',
+    r'^-+$',
+    r'^=+$',
+    r'^⚠️.*failed:',
+    r'^To stop or manage',
+    r'^Script not found',
+    r'^\s*$',
+]
+
+_CRON_SUMMARY_MAX_LINES = 4
+_CRON_SUMMARY_MAX_CHARS = 600
+
+
+def _clean_cron_output(content: str, job_name: Optional[str] = None) -> Optional[str]:
+    """Strip cron-runner noise from raw cron output and build one BuJo entry line.
+
+    Mirrors the exact behavior previously inlined in
+    ``APIServerAdapter.send()``: strips blank/noise lines (see
+    ``_CRON_NOISE_PATTERNS``), joins up to the first 4 remaining lines with
+    " | ", appends a "(+N líneas)" marker when more were dropped, truncates
+    the result to 600 chars (597 + "..."), and prefixes it with
+    ``[job_name]`` when a job name is given.
+
+    Returns ``None`` when nothing meaningful remains after noise removal —
+    callers should treat that as "skip the write", not an error.
+    """
+    lines = content.split("\n")
+    clean_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        skip = False
+        for pattern in _CRON_NOISE_PATTERNS:
+            if re.match(pattern, stripped):
+                skip = True
+                break
+        if not skip:
+            clean_lines.append(stripped)
+
+    if not clean_lines:
+        return None
+
+    summary = " | ".join(clean_lines[:_CRON_SUMMARY_MAX_LINES])
+    if len(clean_lines) > _CRON_SUMMARY_MAX_LINES:
+        summary += f" | (+{len(clean_lines) - _CRON_SUMMARY_MAX_LINES} líneas)"
+
+    if len(summary) > _CRON_SUMMARY_MAX_CHARS:
+        summary = summary[:_CRON_SUMMARY_MAX_CHARS - 3] + "..."
+
+    if job_name is None:
+        return summary
+    return f"[{job_name}] {summary}"
+
+
 def check_api_server_requirements() -> bool:
     """Check if API server dependencies are available."""
     return AIOHTTP_AVAILABLE
@@ -1546,6 +1608,7 @@ class APIServerAdapter(BasePlatformAdapter):
             parse_active_agents,
             read_runtime_status,
         )
+        from gateway.runtime_identity import get_runtime_identity
 
         runtime = read_runtime_status() or {}
         gw_state = runtime.get("gateway_state")
@@ -1568,6 +1631,7 @@ class APIServerAdapter(BasePlatformAdapter):
             "readiness": readiness,
             "platform": "hermes-agent",
             "version": _hermes_version(),
+            "runtime_identity": get_runtime_identity(),
             "gateway_state": gw_state,
             "platforms": runtime.get("platforms", {}),
             "active_agents": gw_active,
@@ -5110,9 +5174,12 @@ class APIServerAdapter(BasePlatformAdapter):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         """
-        Deliver cron output to the BuJo (bullet journal).
-        Cleans the output: removes [Cron] headers, error noise, job IDs.
-        Writes concise entries to the proper section.
+        Deliver an API-server message.
+
+        Cron output is intentionally not persisted to BuJo by default.
+        BuJo is for explicit human intent, not telemetry or scheduled-job
+        output. Callers that deliberately need a BuJo write must opt in with
+        metadata={"bujo_write": True}.
         
         Supports date override via metadata["date"] (YYYY-MM-DD).
         Supports section override via metadata["section"] (journal|reportes|agenda|estado|mas).
@@ -5120,57 +5187,23 @@ class APIServerAdapter(BasePlatformAdapter):
         """
         try:
             from datetime import datetime
-            import re
 
             meta = metadata or {}
+            if meta.get("bujo_write") is not True:
+                logger.info("[api_server] Skipping implicit BuJo capture for cron output")
+                return SendResult(success=True)
             job_name = meta.get("job_name", meta.get("name", "Cron"))
             target_date = meta.get("date", datetime.now().strftime("%Y-%m-%d"))
             section = meta.get("section", "reportes")
-            
-            # Clean the content: remove noise lines
-            noise_patterns = [
-                r'^\[Cron\]$',
-                r'^Cronjob Response:',
-                r'^\(job_id:',
-                r'^─+$',
-                r'^-+$',
-                r'^=+$',
-                r'^⚠️.*failed:',
-                r'^To stop or manage',
-                r'^Script not found',
-                r'^\s*$',
-            ]
-            
-            lines = content.split("\n")
-            clean_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                skip = False
-                for pattern in noise_patterns:
-                    if re.match(pattern, stripped):
-                        skip = True
-                        break
-                if not skip:
-                    clean_lines.append(stripped)
-            
+
+            # Clean the content and build one concise entry
+            entry_content = _clean_cron_output(content, job_name)
+
             # If nothing meaningful remains, skip entirely
-            if not clean_lines:
+            if entry_content is None:
                 logger.info("[api_server] Cron '%s': output was all noise, skipping BuJo write", job_name)
                 return SendResult(success=True)
-            
-            # Build one concise entry
-            summary = " | ".join(clean_lines[:4])
-            if len(clean_lines) > 4:
-                summary += f" | (+{len(clean_lines)-4} líneas)"
-            
-            # Truncate to reasonable length
-            if len(summary) > 600:
-                summary = summary[:597] + "..."
-            
-            entry_content = f"[{job_name}] {summary}"
-            
+
             # Direct SQLite insert into proper section
             import sqlite3
             from hermes_cli.config import get_hermes_home
