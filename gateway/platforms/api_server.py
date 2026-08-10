@@ -1608,6 +1608,7 @@ class APIServerAdapter(BasePlatformAdapter):
             parse_active_agents,
             read_runtime_status,
         )
+        from gateway.runtime_identity import get_runtime_identity
 
         runtime = read_runtime_status() or {}
         gw_state = runtime.get("gateway_state")
@@ -1630,6 +1631,7 @@ class APIServerAdapter(BasePlatformAdapter):
             "readiness": readiness,
             "platform": "hermes-agent",
             "version": _hermes_version(),
+            "runtime_identity": get_runtime_identity(),
             "gateway_state": gw_state,
             "platforms": runtime.get("platforms", {}),
             "active_agents": gw_active,
