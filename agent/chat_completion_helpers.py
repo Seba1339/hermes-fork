@@ -35,6 +35,7 @@ from agent.message_sanitization import (
     _sanitize_surrogates,
     _repair_tool_call_arguments,
 )
+from agent.trajectory_log import get_trajectory_logger, trajectory_event
 from tools.terminal_tool import is_persistent_env
 from utils import base_url_host_matches, base_url_hostname, env_float, env_int
 
@@ -235,6 +236,52 @@ def _check_stale_giveup(agent) -> None:
             "avoid an indefinite stall. Switch models or start a new "
             "session, then retry."
         )
+
+
+def log_trajectory_request(agent, api_kwargs: dict) -> None:
+    """Record the effective model request without affecting API execution."""
+    try:
+        logger_obj = get_trajectory_logger(agent)
+        trajectory_event(
+            logger_obj,
+            "llm.request",
+            {
+                "request_id": getattr(agent, "_current_api_request_id", None),
+                "turn_id": getattr(agent, "_current_turn_id", None),
+                "provider": getattr(agent, "provider", None),
+                "model": getattr(agent, "model", None),
+                "api_mode": getattr(agent, "api_mode", None),
+                "request": api_kwargs,
+            },
+        )
+    except Exception as exc:
+        logger.warning("trajectory logging failed: %s", exc)
+
+
+def log_trajectory_response(agent, response: Any, *, duration_ms: Optional[int] = None) -> None:
+    """Record a provider response without allowing logging to affect the turn."""
+    try:
+        if hasattr(response, "model_dump"):
+            payload = response.model_dump()
+        elif hasattr(response, "to_dict"):
+            payload = response.to_dict()
+        elif hasattr(response, "__dict__"):
+            payload = vars(response)
+        else:
+            payload = response
+        logger_obj = get_trajectory_logger(agent)
+        trajectory_event(
+            logger_obj,
+            "llm.response",
+            {
+                "request_id": getattr(agent, "_current_api_request_id", None),
+                "turn_id": getattr(agent, "_current_turn_id", None),
+                "duration_ms": duration_ms,
+                "response": payload,
+            },
+        )
+    except Exception as exc:
+        logger.warning("trajectory logging failed: %s", exc)
 
 
 def _dispatch_nonstreaming_api_request(agent, api_kwargs: dict, *, make_client):

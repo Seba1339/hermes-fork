@@ -278,6 +278,19 @@ def _docker_has_host_access(config: Dict[str, Any]) -> bool:
     return any(_docker_volume_uses_host_path(vol) for vol in config.get("docker_volumes", []))
 
 
+def _trajectory_command_block_error(command: str) -> str | None:
+    """Return a hard denial when shell text targets private trajectory logs."""
+    raw = str(command or "")
+    normalized = raw.replace("\\\\", "/")
+    configured = str(Path(os.path.expanduser("~/.hermes/data/trajectory"))).replace("\\\\", "/")
+    if ".hermes/data/trajectory" in normalized or configured in normalized:
+        return (
+            "Command denied: ~/.hermes/data/trajectory is a private Hermes "
+            "trajectory log and cannot be accessed through the shell tool."
+        )
+    return None
+
+
 def _check_all_guards(command: str, env_type: str,
                       has_host_access: bool = False) -> dict:
     """Delegate to consolidated guard (tirith + dangerous cmd) with CLI callback."""
@@ -2287,6 +2300,18 @@ def terminal_tool(
                     ),
                     "status": "error",
                 }, ensure_ascii=False)
+
+        # Private trajectory logs are denied independently of approval/force.
+        # ``force`` must never turn this data boundary off.
+        trajectory_error = _trajectory_command_block_error(command)
+        if trajectory_error:
+            logger.warning("Blocked trajectory log shell access")
+            return json.dumps({
+                "output": "",
+                "exit_code": -1,
+                "error": trajectory_error,
+                "status": "blocked",
+            }, ensure_ascii=False)
 
         # Pre-exec security checks (tirith + dangerous command detection)
         # Skip check if force=True (user has confirmed they want to run it)

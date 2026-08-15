@@ -5691,11 +5691,28 @@ class AIAgent:
         ``force=False``.
         """
         from agent.conversation_compression import compress_context
-        return compress_context(
+        from agent.trajectory_log import get_trajectory_logger
+
+        trajectory_logger = get_trajectory_logger(self)
+        before_messages = list(messages)
+        result = compress_context(
             self, messages, system_message,
             approx_tokens=approx_tokens, task_id=task_id, focus_topic=focus_topic,
             force=force,
         )
+        try:
+            if trajectory_logger is not None:
+                trajectory_logger.log_compression(
+                    before_messages,
+                    result[0],
+                    before_tokens=approx_tokens,
+                    after_tokens=None,
+                    reason="manual" if force else "automatic",
+                )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("trajectory logging failed: %s", exc)
+        return result
 
     def _set_tool_guardrail_halt(self, decision: ToolGuardrailDecision) -> None:
         """Record the first guardrail decision that should stop this turn."""
@@ -5881,17 +5898,32 @@ class AIAgent:
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
         from agent.conversation_loop import run_conversation
-        return run_conversation(
-            self,
-            user_message,
-            system_message,
-            conversation_history,
-            task_id,
-            stream_callback,
-            persist_user_message,
-            persist_user_timestamp=persist_user_timestamp,
-            moa_config=moa_config,
-        )
+        from agent.trajectory_log import get_trajectory_logger, trajectory_event
+
+        try:
+            return run_conversation(
+                self,
+                user_message,
+                system_message,
+                conversation_history,
+                task_id,
+                stream_callback,
+                persist_user_message,
+                persist_user_timestamp=persist_user_timestamp,
+                moa_config=moa_config,
+            )
+        except BaseException:
+            _trajectory_status = "error"
+            raise
+        finally:
+            trajectory_event(
+                get_trajectory_logger(self),
+                "turn.end",
+                {
+                    "turn_id": getattr(self, "_current_turn_id", None),
+                    "status": locals().get("_trajectory_status", "completed"),
+                },
+            )
 
     def chat(self, message: str, stream_callback: Optional[callable] = None) -> str:
         """

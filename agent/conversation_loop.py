@@ -65,6 +65,7 @@ from agent.retry_utils import (
     zai_coding_overload_retry_ceiling,
 )
 from agent.trajectory import has_incomplete_scratchpad
+from agent.trajectory_log import get_trajectory_logger, trajectory_event
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
 from hermes_constants import PARTIAL_STREAM_STUB_ID
 from hermes_logging import set_session_context
@@ -611,6 +612,17 @@ def run_conversation(
     active_system_prompt = _ctx.active_system_prompt
     effective_task_id = _ctx.effective_task_id
     turn_id = _ctx.turn_id
+    agent._current_turn_id = turn_id
+    _trajectory_logger = get_trajectory_logger(agent)
+    trajectory_event(
+        _trajectory_logger,
+        "turn.start",
+        {
+            "turn_id": turn_id,
+            "user_message": user_message,
+            "source": getattr(agent, "platform", None) or "unknown",
+        },
+    )
     current_turn_user_idx = _ctx.current_turn_user_idx
     _should_review_memory = _ctx.should_review_memory
     _plugin_user_context = _ctx.plugin_user_context
@@ -1291,6 +1303,12 @@ def run_conversation(
                 except Exception:
                     pass
 
+                try:
+                    from agent.chat_completion_helpers import log_trajectory_request
+                    log_trajectory_request(agent, api_kwargs)
+                except Exception as exc:
+                    logger.warning("trajectory logging failed: %s", exc)
+
                 if env_var_enabled("HERMES_DUMP_REQUESTS"):
                     agent._dump_api_request_debug(api_kwargs, reason="preflight")
 
@@ -1379,6 +1397,15 @@ def run_conversation(
                     api_call_count=api_call_count,
                     middleware_trace=list(_llm_middleware_trace),
                 )
+                try:
+                    from agent.chat_completion_helpers import log_trajectory_response
+                    log_trajectory_response(
+                        agent,
+                        response,
+                        duration_ms=int((time.time() - api_start_time) * 1000),
+                    )
+                except Exception as exc:
+                    logger.warning("trajectory logging failed: %s", exc)
                 
                 api_duration = time.time() - api_start_time
                 
@@ -4840,7 +4867,33 @@ def run_conversation(
                     except Exception:
                         pass
 
+                _tool_messages_start = len(messages)
+                for tool_call in assistant_message.tool_calls:
+                    trajectory_event(
+                        _trajectory_logger,
+                        "tool.call",
+                        {
+                            "turn_id": turn_id,
+                            "tool_call_id": getattr(tool_call, "id", None),
+                            "name": getattr(getattr(tool_call, "function", None), "name", None),
+                            "arguments": getattr(getattr(tool_call, "function", None), "arguments", None),
+                        },
+                    )
                 agent._execute_tool_calls(assistant_message, messages, effective_task_id, api_call_count)
+
+                for tool_message in messages[_tool_messages_start:]:
+                    if not isinstance(tool_message, dict) or tool_message.get("role") != "tool":
+                        continue
+                    trajectory_event(
+                        _trajectory_logger,
+                        "tool.result",
+                        {
+                            "turn_id": turn_id,
+                            "tool_call_id": tool_message.get("tool_call_id"),
+                            "name": tool_message.get("name"),
+                            "result": tool_message.get("content"),
+                        },
+                    )
 
                 if agent._tool_guardrail_halt_decision is not None:
                     decision = agent._tool_guardrail_halt_decision

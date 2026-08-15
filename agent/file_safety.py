@@ -25,6 +25,19 @@ def _hermes_root_path() -> Path:
         return Path(os.path.expanduser("~/.hermes"))
 
 
+def _trajectory_paths() -> list[Path]:
+    """Return active and global trajectory directories that tools must not read."""
+    paths: list[Path] = []
+    for base in (_hermes_home_path(), _hermes_root_path()):
+        try:
+            path = (base / "data" / "trajectory").resolve()
+            if path not in paths:
+                paths.append(path)
+        except Exception:
+            continue
+    return paths
+
+
 def build_write_denied_paths(home: str) -> set[str]:
     """Return exact sensitive paths that must never be written."""
     hermes_home = _hermes_home_path()
@@ -60,7 +73,7 @@ def build_write_denied_paths(home: str) -> set[str]:
 
 def build_write_denied_prefixes(home: str) -> list[str]:
     """Return sensitive directory prefixes that must never be written."""
-    return [
+    prefixes = [
         os.path.realpath(p) + os.sep
         for p in [
             os.path.join(home, ".ssh"),
@@ -75,6 +88,8 @@ def build_write_denied_prefixes(home: str) -> list[str]:
             os.path.join(home, ".config", "gcloud"),
         ]
     ]
+    prefixes.extend(str(path) + os.sep for path in _trajectory_paths())
+    return prefixes
 
 
 def get_safe_write_roots() -> set[str]:
@@ -223,6 +238,16 @@ def get_read_block_error(path: str) -> Optional[str]:
     terminal cwd differs from the process cwd.
     """
     resolved = Path(path).expanduser().resolve()
+
+    for trajectory_dir in _trajectory_paths():
+        try:
+            resolved.relative_to(trajectory_dir)
+        except ValueError:
+            continue
+        return (
+            f"Access denied: {path} is the private Hermes trajectory log "
+            "and cannot be read by filesystem tools."
+        )
 
     # Resolve BOTH the active HERMES_HOME (profile-aware) AND the global
     # Hermes root so credential stores at <root>/auth.json etc. are also
