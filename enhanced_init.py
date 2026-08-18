@@ -60,16 +60,19 @@ def apply_bujo_agenda_ingress_patch():
         from bujo_core.hermes_gateway_ingress import ingest_gateway_event
 
         gateway_logger = logging.getLogger("gateway.run")
-        settings = load_config().get("bujo_2", {}).get("ingress", {})
-        if not settings.get("enabled", False):
-            gateway_logger.info("BuJo 2 ingress disabled by configuration")
-            return False
-        mode = settings.get("mode", "shadow")
-        database_path = os.path.expanduser(settings.get("database_path", "~/projects/bujo-2.0/runtime/agenda.sqlite"))
         original_handle = BasePlatformAdapter.handle_message
 
         async def with_bujo_agenda_ingress(adapter, event):
             try:
+                settings = await asyncio.to_thread(
+                    lambda: load_config().get("bujo_2", {}).get("ingress", {})
+                )
+                if not settings.get("enabled", False):
+                    return await original_handle(adapter, event)
+                mode = settings.get("mode", "shadow")
+                database_path = os.path.expanduser(
+                    settings.get("database_path", "~/projects/bujo-2.0/runtime/agenda.sqlite")
+                )
                 outcome = await asyncio.to_thread(
                     ingest_gateway_event,
                     event,
@@ -88,8 +91,9 @@ def apply_bujo_agenda_ingress_patch():
             return await original_handle(adapter, event)
 
         BasePlatformAdapter.handle_message = with_bujo_agenda_ingress
-        logger.info("BuJo 2 agenda ingress enabled in %s mode", mode)
+        logger.info("BuJo 2 agenda ingress patch installed; configuration is read per message")
         return True
+
     except Exception as exc:
         logger.warning("Could not enable BuJo 2 agenda ingress: %s", exc)
         return False
